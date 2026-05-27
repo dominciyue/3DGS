@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>3DGS-Agent · images → interactive Gaussian scene</title>
+  <title>3DGS-Agent · 图片生成可交互高斯场景</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -12,99 +12,99 @@
       <span class="logo" aria-hidden="true"></span>
       <div>
         <h1>3DGS&#8202;·&#8202;Agent</h1>
-        <p class="tagline">images → 3D Gaussian Splatting → Unity</p>
+        <p class="tagline">图片 → 3D 高斯泼溅 → Unity</p>
       </div>
     </div>
     <div class="status-badges" id="health">
-      <span class="badge badge-muted" id="badge-conn">connecting…</span>
+      <span class="badge badge-muted" id="badge-conn">连接中…</span>
     </div>
   </header>
 
   <main>
-    <!-- ============ NEW JOB ============ -->
+    <!-- ============ 新建任务 ============ -->
     <section class="panel" id="compose">
-      <h2>New scene</h2>
+      <h2>新建场景</h2>
 
       <div class="dropzone" id="dropzone" tabindex="0" role="button"
-           aria-label="Drop images here or click to browse">
+           aria-label="拖入图片，或点击选择">
         <input type="file" id="file-input" accept="image/*" multiple hidden />
         <div class="dz-inner">
           <span class="dz-icon" aria-hidden="true"></span>
-          <p><strong>Drop photos here</strong> or click to browse</p>
-          <p class="hint">Multiple overlapping views of one scene/object work best
-             (~20–200). One image is not enough for multi-view 3DGS.</p>
+          <p><strong>拖入照片</strong> 或 点击选择</p>
+          <p class="hint">对同一物体/场景多角度、有重叠的照片效果最好（约 20–200 张）。
+             单张图片无法做多视角 3DGS 重建。</p>
         </div>
       </div>
       <div class="thumbs" id="thumbs"></div>
 
       <label class="field">
-        <span>Instruction for the Agent</span>
+        <span>给 Agent 的指令</span>
         <textarea id="instruction" rows="2"
-          placeholder="e.g. reconstruct this statue in high quality, anti-aliased so it's stable when I zoom out"></textarea>
+          placeholder="例如：把这个雕像重建出来，要高质量、抗锯齿，缩小看也稳定"></textarea>
       </label>
 
       <div class="row">
         <label class="field grow">
-          <span>Quality preset</span>
+          <span>质量预设</span>
           <select id="preset">
-            <option value="">Let the Agent decide</option>
-            <option value="preview">preview · fast (~7k iters)</option>
-            <option value="balanced">balanced · default (~30k)</option>
-            <option value="high">high · best quality</option>
+            <option value="">让 Agent 自动决定</option>
+            <option value="preview">preview · 快速（约 7k 次迭代）</option>
+            <option value="balanced">balanced · 默认（约 30k）</option>
+            <option value="high">high · 最佳质量</option>
           </select>
         </label>
-        <button class="btn-primary" id="submit">Generate scene</button>
+        <button class="btn-primary" id="submit">生成场景</button>
       </div>
       <p class="error" id="compose-error" hidden></p>
     </section>
 
-    <!-- ============ ACTIVE JOB ============ -->
+    <!-- ============ 当前任务 ============ -->
     <section class="panel" id="job" hidden>
       <div class="job-head">
-        <h2>Job <code id="job-id"></code></h2>
-        <span class="badge" id="job-status">queued</span>
-        <button class="btn-ghost" id="cancel" hidden>Cancel</button>
-        <button class="btn-ghost" id="new-job">＋ New</button>
+        <h2>任务 <code id="job-id"></code></h2>
+        <span class="badge" id="job-status">排队中</span>
+        <button class="btn-ghost" id="cancel" hidden>取消</button>
+        <button class="btn-ghost" id="new-job">＋ 新建</button>
       </div>
 
       <div class="plan" id="plan" hidden>
-        <span class="plan-label">Agent plan</span>
+        <span class="plan-label">Agent 规划</span>
         <span id="plan-detail" class="mono"></span>
       </div>
 
       <ol class="stages" id="stages"></ol>
 
       <details class="logs" open>
-        <summary>Pipeline log</summary>
+        <summary>流水线日志</summary>
         <pre id="log" class="log"></pre>
       </details>
 
       <div class="result" id="result" hidden>
-        <h3>✓ Scene ready</h3>
+        <h3>✓ 场景就绪</h3>
         <p id="result-stats" class="mono"></p>
-        <a class="btn-primary" id="download" href="#" download>Download model.ply</a>
+        <a class="btn-primary" id="download" href="#" download>下载 model.ply</a>
         <div class="next">
-          <strong>Open in Unity</strong>
+          <strong>在 Unity 中打开</strong>
           <ol>
-            <li>Unity 6 project with the
-              <a href="https://github.com/aras-p/UnityGaussianSplatting" target="_blank" rel="noopener">aras-p GaussianSplatting</a> package.</li>
-            <li>Drag <code>model.ply</code> into the project (it builds a GaussianSplatAsset).</li>
-            <li>Add <code>GaussianSplatRenderer</code> + our <code>Assets/Scripts</code>; press Play.</li>
+            <li>用安装了
+              <a href="https://github.com/aras-p/UnityGaussianSplatting" target="_blank" rel="noopener">aras-p GaussianSplatting</a> 插件的 Unity 6 工程。</li>
+            <li>把 <code>model.ply</code> 拖进工程（会自动生成 GaussianSplatAsset）。</li>
+            <li>添加 <code>GaussianSplatRenderer</code> 和我们的 <code>Assets/Scripts</code>，点 Play。</li>
           </ol>
-          <p class="hint">Full steps: <code>docs/06-unity-integration.md</code></p>
+          <p class="hint">完整步骤见 <code>docs/06-unity-integration.md</code></p>
         </div>
       </div>
     </section>
 
-    <!-- ============ RECENT ============ -->
+    <!-- ============ 最近任务 ============ -->
     <section class="panel" id="recent-panel">
-      <h2>Recent jobs</h2>
-      <ul class="recent" id="recent"><li class="empty">No jobs yet.</li></ul>
+      <h2>最近的任务</h2>
+      <ul class="recent" id="recent"><li class="empty">暂无任务。</li></ul>
     </section>
   </main>
 
   <footer>
-    <span>VRAR · Group 13 — 3DGS-Agent</span>
+    <span>VRAR · 第 13 组 — 3DGS-Agent</span>
     <a href="https://github.com/dominciyue/3DGS" target="_blank" rel="noopener">github.com/dominciyue/3DGS</a>
   </footer>
 

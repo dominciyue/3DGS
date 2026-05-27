@@ -1,39 +1,46 @@
-/* 3DGS-Agent dashboard logic. Talks to the FastAPI backend (SSE for live progress). */
+/* 3DGS-Agent 控制台逻辑。与 FastAPI 后端通信（进度走 SSE）。 */
 "use strict";
 
-// API base: when the backend serves this page (any port) use same-origin ("").
-// Only the standalone static dev server (python -m http.server 5173) or file://
-// needs to point at the backend explicitly.
+// API 基址：被后端托管时（任意端口）用同源（""）。
+// 仅独立静态服务器（python -m http.server 5173）或 file:// 才显式指向后端。
 const API = (location.port === "5173" || location.protocol === "file:")
   ? "http://localhost:8000" : "";
 
+// 阶段 key（与后端一致，勿改）→ 中文显示名
 const STAGES = [
-  ["preprocess", "Preprocess images"],
-  ["colmap", "COLMAP · Structure-from-Motion"],
-  ["train", "Train 3D Gaussians"],
-  ["convert", "Convert / validate .ply"],
-  ["package", "Package deliverable"],
+  ["preprocess", "预处理图像"],
+  ["colmap", "COLMAP · 运动恢复结构 (SfM)"],
+  ["train", "训练 3D 高斯"],
+  ["convert", "转换 / 校验 .ply"],
+  ["package", "打包交付物"],
 ];
+
+// 任务状态 → 中文
+const STATUS_LABEL = {
+  queued: "排队中", planning: "规划中", running: "运行中",
+  done: "完成", failed: "失败", cancelled: "已取消",
+};
+const statusText = (s) => STATUS_LABEL[s] || s;
 
 const $ = (id) => document.getElementById(id);
 let selectedFiles = [];
-let es = null;            // active EventSource
+let es = null;            // 当前 EventSource
 let currentJob = null;
 
-/* ----------------------------- health ----------------------------------- */
+/* ----------------------------- 健康状态 ----------------------------- */
 async function loadHealth() {
   const el = $("health");
   try {
     const h = await (await fetch(`${API}/api/health`)).json();
     el.innerHTML = "";
-    el.append(badge(h.mock_pipeline ? "mock pipeline" : "real pipeline",
+    el.append(badge(h.mock_pipeline ? "mock 流水线" : "真实流水线",
                     h.mock_pipeline ? "badge-muted" : "badge-ok"));
-    el.append(badge(h.llm_enabled ? "Claude agent" : "mock agent",
+    el.append(badge(h.llm_enabled ? "Claude 智能体" : "mock 智能体",
                     h.llm_enabled ? "badge-ok" : "badge-muted"));
     el.append(badge(`v${h.version}`, "badge-muted"));
   } catch {
     el.innerHTML = "";
-    el.append(badge("backend offline", "badge-err"));
+    el.append(badge("后端离线", "badge-err"));
   }
 }
 function badge(text, cls = "badge-muted") {
@@ -43,7 +50,7 @@ function badge(text, cls = "badge-muted") {
   return s;
 }
 
-/* --------------------------- file selection ----------------------------- */
+/* --------------------------- 选择图片 ----------------------------- */
 const dz = $("dropzone");
 const fileInput = $("file-input");
 dz.addEventListener("click", () => fileInput.click());
@@ -71,23 +78,23 @@ function renderThumbs() {
   if (selectedFiles.length) {
     const c = document.createElement("span");
     c.className = "count";
-    c.textContent = `${selectedFiles.length} image${selectedFiles.length > 1 ? "s" : ""}`;
+    c.textContent = `${selectedFiles.length} 张图片`;
     box.append(c);
   }
 }
 
-/* ------------------------------ submit ----------------------------------- */
+/* ------------------------------ 提交 ----------------------------------- */
 $("submit").addEventListener("click", submitJob);
 async function submitJob() {
   const err = $("compose-error");
   err.hidden = true;
   if (!selectedFiles.length) {
-    err.textContent = "Add at least one image.";
+    err.textContent = "请至少添加一张图片。";
     err.hidden = false;
     return;
   }
   const btn = $("submit");
-  btn.disabled = true; btn.textContent = "Uploading…";
+  btn.disabled = true; btn.textContent = "上传中…";
   try {
     const fd = new FormData();
     selectedFiles.forEach((f) => fd.append("images", f, f.name));
@@ -99,14 +106,14 @@ async function submitJob() {
     openJob(job_id);
     selectedFiles = []; renderThumbs();
   } catch (e) {
-    err.textContent = `Could not start job: ${e.message}`;
+    err.textContent = `无法启动任务：${e.message}`;
     err.hidden = false;
   } finally {
-    btn.disabled = false; btn.textContent = "Generate scene";
+    btn.disabled = false; btn.textContent = "生成场景";
   }
 }
 
-/* ------------------------------ job view --------------------------------- */
+/* ------------------------------ 任务视图 --------------------------------- */
 $("new-job").addEventListener("click", () => {
   if (es) es.close();
   $("job").hidden = true;
@@ -148,7 +155,7 @@ function setStage(key, { status, pct, message }) {
 
 function setStatus(status) {
   const b = $("job-status");
-  b.textContent = status;
+  b.textContent = statusText(status);
   b.className = "badge " + ({ running: "badge-run", planning: "badge-run",
     done: "badge-ok", failed: "badge-err", cancelled: "badge-err" }[status] || "badge-muted");
   $("cancel").hidden = !(status === "running" || status === "planning");
@@ -159,8 +166,8 @@ function showPlan(config, planner) {
   $("plan").hidden = false;
   const c = config;
   $("plan-detail").textContent =
-    `preset=${c.preset} · backend=${c.train.backend} · iters=${c.train.iterations}`
-    + (c.convert.max_splats ? ` · cap=${c.convert.max_splats}` : "")
+    `预设=${c.preset} · 后端=${c.train.backend} · 迭代=${c.train.iterations}`
+    + (c.convert.max_splats ? ` · 上限=${c.convert.max_splats}` : "")
     + (planner ? `   (${planner})` : "")
     + (c.notes ? `\n${c.notes}` : "");
 }
@@ -185,15 +192,15 @@ async function openJob(id) {
   setStatus("queued");
   $("job").scrollIntoView({ behavior: "smooth" });
 
-  // Hydrate from current state (covers reconnect / already-finished jobs).
+  // 拉取当前状态（兼容重连 / 已完成的任务）
   try {
     const job = await (await fetch(`${API}/api/jobs/${id}`)).json();
     applyJobState(job);
-  } catch { /* ignore */ }
+  } catch { /* 忽略 */ }
 
   es = new EventSource(`${API}/api/jobs/${id}/events`);
   es.onmessage = (e) => handleEvent(JSON.parse(e.data));
-  es.onerror = () => { /* browser auto-reconnects; final event closes it */ };
+  es.onerror = () => { /* 浏览器自动重连；最终事件会关闭它 */ };
 }
 
 function applyJobState(job) {
@@ -202,7 +209,7 @@ function applyJobState(job) {
   (job.stages || []).forEach((s) =>
     setStage(s.name, { status: s.status, pct: s.progress, message: s.message }));
   if (job.status === "done") showResult(job);
-  if (job.status === "failed") logLine(`ERROR: ${job.error || "failed"}`);
+  if (job.status === "failed") logLine(`错误：${job.error || "失败"}`);
 }
 
 function handleEvent(ev) {
@@ -217,7 +224,7 @@ function handleEvent(ev) {
       setStage(ev.stage, { status: "done", pct: 1 });
       if (ev.stage === "package" && d.metrics) Object.assign(pkgMetrics, d.metrics);
       break;
-    case "stage_failed": setStage(ev.stage, { status: "failed" }); logLine(`[${ev.stage}] ERROR: ${d.error}`); break;
+    case "stage_failed": setStage(ev.stage, { status: "failed" }); logLine(`[${ev.stage}] 错误：${d.error}`); break;
     case "job_finished":
       setStatus(d.status);
       if (d.status === "done") fetch(`${API}/api/jobs/${ev.job_id}`).then(r => r.json()).then(showResult);
@@ -225,7 +232,7 @@ function handleEvent(ev) {
       loadRecent();
       break;
     case "job_failed":
-      setStatus("failed"); logLine(`ERROR: ${d.error}`); if (es) es.close(); loadRecent();
+      setStatus("failed"); logLine(`错误：${d.error}`); if (es) es.close(); loadRecent();
       break;
   }
 }
@@ -234,38 +241,38 @@ function showResult(job) {
   $("result").hidden = false;
   $("download").href = `${API}/api/jobs/${job.id}/result`;
   const parts = [];
-  if (pkgMetrics.splats) parts.push(`${pkgMetrics.splats.toLocaleString()} splats`);
+  if (pkgMetrics.splats) parts.push(`${pkgMetrics.splats.toLocaleString()} 个高斯点`);
   if (pkgMetrics.bytes) parts.push(`${(pkgMetrics.bytes / 1024).toFixed(0)} KiB`);
   if (job.config) parts.push(`${job.config.preset}/${job.config.train.backend}`);
   $("result-stats").textContent = parts.join(" · ");
 }
 
-/* ------------------------------ recent ----------------------------------- */
+/* ------------------------------ 最近任务 ----------------------------- */
 async function loadRecent() {
   try {
     const jobs = await (await fetch(`${API}/api/jobs`)).json();
     const ul = $("recent");
     ul.innerHTML = "";
-    if (!jobs.length) { ul.innerHTML = '<li class="empty">No jobs yet.</li>'; return; }
+    if (!jobs.length) { ul.innerHTML = '<li class="empty">暂无任务。</li>'; return; }
     jobs.slice(0, 8).forEach((j) => {
       const li = document.createElement("li");
       li.innerHTML =
         `<span class="rid">${j.id}</span>`
-        + `<span class="badge ${statusClass(j.status)}">${j.status}</span>`
-        + `<span class="rins">${escapeHtml(j.instruction || "(no instruction)")}</span>`;
+        + `<span class="badge ${statusClass(j.status)}">${statusText(j.status)}</span>`
+        + `<span class="rins">${escapeHtml(j.instruction || "（无指令）")}</span>`;
       const btn = document.createElement("button");
-      btn.textContent = "open";
+      btn.textContent = "打开";
       btn.onclick = () => openJob(j.id);
       li.append(btn);
       ul.append(li);
     });
-  } catch { /* offline */ }
+  } catch { /* 离线 */ }
 }
 const statusClass = (s) => ({ done: "badge-ok", running: "badge-run", planning: "badge-run",
   failed: "badge-err", cancelled: "badge-err" }[s] || "badge-muted");
 const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-/* ------------------------------ boot ------------------------------------- */
+/* ------------------------------ 启动 ------------------------------------- */
 loadHealth();
 loadRecent();
