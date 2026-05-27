@@ -1,9 +1,11 @@
 /* 3DGS-Agent dashboard logic. Talks to the FastAPI backend (SSE for live progress). */
 "use strict";
 
-// API base: same-origin when the backend serves us; else the dev backend.
-const API = (location.port === "8000" || location.port === "")
-  ? "" : "http://localhost:8000";
+// API base: when the backend serves this page (any port) use same-origin ("").
+// Only the standalone static dev server (python -m http.server 5173) or file://
+// needs to point at the backend explicitly.
+const API = (location.port === "5173" || location.protocol === "file:")
+  ? "http://localhost:8000" : "";
 
 const STAGES = [
   ["preprocess", "Preprocess images"],
