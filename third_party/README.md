@@ -1,11 +1,8 @@
-# third_party — upstream components (NOT vendored)
+# third_party — 上游组件（未纳入仓库）
 
-This project **orchestrates** several research repos rather than copying them in. We
-do not commit their source here (see the repo `.gitignore`: `third_party/*/` is
-ignored, this README is kept). Clone what you need, then point the backend at it via
-`backend/.env` (see `backend/.env.example`).
+本项目**编排**多个研究仓库，而非将其源码复制进来。我们不在此提交其源码（参见仓库 `.gitignore`：`third_party/*/` 已被忽略，仅保留本 README）。按需克隆，然后通过 `backend/.env` 将后端指向对应路径（参见 `backend/.env.example`）。
 
-## Setup
+## 配置
 
 ```bash
 cd third_party
@@ -19,7 +16,7 @@ git clone https://github.com/hbb1/2d-gaussian-splatting            # surfaces/me
 git clone https://github.com/NJU-3DV/Relightable3DGaussian         # relighting
 ```
 
-Then in `backend/.env`:
+然后在 `backend/.env` 中配置：
 
 ```
 COLMAP_BIN=/usr/bin/colmap
@@ -30,25 +27,22 @@ GS_PYTHON=/path/to/conda/envs/gaussian_splatting/bin/python
 # RELIGHT_REPO_DIR=../third_party/Relightable3DGaussian
 ```
 
-Unity viewers live in the Unity project, not here:
-- Primary: https://github.com/aras-p/UnityGaussianSplatting (see `docs/06`)
-- VR: https://github.com/clarte53/GaussianSplattingVRViewerUnity (see `docs/07`)
+Unity 查看器位于 Unity 项目中，不在此处：
+- 主要版本：https://github.com/aras-p/UnityGaussianSplatting（参见 `docs/06`）
+- VR 版本：https://github.com/clarte53/GaussianSplattingVRViewerUnity（参见 `docs/07`）
 
-## ⚠️ Licenses — read before redistributing
+## ⚠️ 许可证——再分发前请仔细阅读
 
-These are **separate works under their own licenses**, several **non-commercial /
-research-only**. Our MIT `LICENSE` does **not** cover them.
+这些均为**各自独立的作品，采用其自身的许可证**，其中多项为**非商业 / 仅限研究**用途。我们的 MIT `LICENSE` **不涵盖**这些组件。
 
-| Component | License (verify upstream) |
+| 组件 | 许可证（请核实上游） |
 |---|---|
-| Inria `gaussian-splatting` | **Gaussian-Splatting License — research / NON-COMMERCIAL only** |
-| Mip-Splatting | Inria-derived; research / non-commercial — check repo |
-| 2D Gaussian Splatting | check repo LICENSE |
-| Relightable 3D Gaussian | check repo LICENSE |
-| aras-p/UnityGaussianSplatting | MIT (but it embeds 3DGS concepts; data you make with the Inria trainer still carries the Inria terms) |
-| clarte53 VR viewer | check repo LICENSE; wraps the Inria CUDA rasterizer |
+| Inria `gaussian-splatting` | **Gaussian-Splatting License — 仅限研究 / 非商业用途** |
+| Mip-Splatting | 源自 Inria；仅限研究/非商业——请查阅仓库 |
+| 2D Gaussian Splatting | 请查阅仓库 LICENSE |
+| Relightable 3D Gaussian | 请查阅仓库 LICENSE |
+| aras-p/UnityGaussianSplatting | MIT（但其中包含 3DGS 概念；使用 Inria 训练器生成的数据仍受 Inria 条款约束） |
+| clarte53 VR 查看器 | 请查阅仓库 LICENSE；封装了 Inria CUDA 光栅化器 |
 | COLMAP | BSD |
 
-For a course project this is fine (research/educational use). **Do not ship the
-trained models or this pipeline commercially** without satisfying each upstream
-license, especially Inria's non-commercial clause.
+对于课程项目而言，这完全可行（研究/教育用途）。**未满足各上游许可证要求（尤其是 Inria 的非商业条款）前，请勿将训练模型或本流水线用于商业用途。**

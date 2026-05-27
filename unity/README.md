@@ -1,66 +1,53 @@
-# Unity — Interactive 3DGS Viewer
+# Unity — 交互式 3DGS 查看器
 
-The "last mile": load a produced `.ply` and make it interactive. These C# scripts give
-the baseline interactions the project requires — **browse, zoom, pan, select, and
-adjust display parameters** — on top of the
-[aras-p/UnityGaussianSplatting](https://github.com/aras-p/UnityGaussianSplatting) renderer.
+"最后一公里"：加载生成的 `.ply` 文件并使其可交互。这些 C# 脚本在 [aras-p/UnityGaussianSplatting](https://github.com/aras-p/UnityGaussianSplatting) 渲染器之上，实现了项目所需的基础交互功能——**浏览、缩放、平移、选择以及调整显示参数**。
 
-> This folder holds **our scripts + setup notes**, not a full Unity project. Create the
-> project locally (only `Assets/`, `Packages/`, `ProjectSettings/` are tracked — caches
-> and build output are ignored by the repo `.gitignore`). Full walkthrough:
-> [`../docs/06-unity-integration.md`](../docs/06-unity-integration.md).
+> 本目录仅包含**我们的脚本和配置说明**，并非完整的 Unity 工程。请在本地创建项目（仓库中仅追踪 `Assets/`、`Packages/`、`ProjectSettings/` 目录——缓存和构建输出已被 `.gitignore` 忽略）。完整操作指南：[`../docs/06-unity-integration.md`](../docs/06-unity-integration.md)。
 
-## Setup (≈10 minutes)
+## 配置（约 10 分钟）
 
-1. **Unity 6 LTS** project (URP recommended), created under this `unity/` folder.
-2. Install **aras-p/UnityGaussianSplatting** (Package Manager → *Add package from git
-   URL*, or clone and add the local package). Follow its README.
-3. Copy `Assets/Scripts/*.cs` (this folder) into the project.
-4. **Import a model:** drag a `.ply` (e.g. a public sample, or one from the backend)
-   into the project — the importer builds a `GaussianSplatAsset`.
-5. Wire up the scene (below) and press **Play**.
+1. 在本 `unity/` 目录下创建 **Unity 6 LTS** 项目（推荐使用 URP）。
+2. 安装 **aras-p/UnityGaussianSplatting**（通过 Package Manager → *从 git URL 添加包*，或克隆后添加本地包）。请参阅其 README。
+3. 将本目录中的 `Assets/Scripts/*.cs` 复制到项目中。
+4. **导入模型：** 将 `.ply` 文件（例如公开示例或后端生成的文件）拖入项目——导入器将构建 `GaussianSplatAsset`。
+5. 按下方说明连接场景，然后点击 **Play**。
 
-## Scene wiring
+## 场景连接
 
-| GameObject | Components | Notes |
+| GameObject | 组件 | 说明 |
 |---|---|---|
-| **Main Camera** | `OrbitCameraController` | left-drag orbit · right/middle-drag pan · wheel zoom |
-| **Splat object** | `GaussianSplatRenderer` (plugin) + `BoxCollider` + `SplatSelectable` | size the BoxCollider to the model — it's the pick/focus proxy |
-| **SceneManager** (empty) | `SplatSceneManager` | assign the camera + (optional) the Display UI |
-| **UI** (empty) | `DisplayParamUI` | on-screen sliders; no Canvas needed (IMGUI) |
+| **Main Camera** | `OrbitCameraController` | 左键拖动旋转 · 右键/中键拖动平移 · 滚轮缩放 |
+| **Splat 对象** | `GaussianSplatRenderer`（插件）+ `BoxCollider` + `SplatSelectable` | 将 BoxCollider 调整至与模型匹配——它是拾取/聚焦的代理 |
+| **SceneManager**（空对象） | `SplatSceneManager` | 指定相机 + （可选）Display UI |
+| **UI**（空对象） | `DisplayParamUI` | 屏幕上的滑块；无需 Canvas（使用 IMGUI） |
 
-Multiple splat objects? Give each its own `BoxCollider` + `SplatSelectable`; the manager
-tracks them all and routes selection/focus.
+若有多个 splat 对象？为每个对象分别添加 `BoxCollider` + `SplatSelectable`；管理器会统一追踪并处理选择/聚焦。
 
-## Controls
+## 操作控制
 
-| Input | Action |
+| 输入 | 操作 |
 |---|---|
-| Left-drag | orbit | 
-| Right/Middle-drag | pan |
-| Mouse wheel | zoom |
-| Left-click (no drag) | select object under cursor (highlights its bounds) |
-| `F` | focus/frame the selected object |
-| `H` | hide/show the selected object |
-| `Esc` | clear selection |
-| Params panel | drag sliders to change splat scale / opacity live |
+| 左键拖动 | 旋转视角 |
+| 右键/中键拖动 | 平移 |
+| 鼠标滚轮 | 缩放 |
+| 左键单击（不拖动） | 选中光标下的对象（高亮显示其边界） |
+| `F` | 聚焦/框选已选中对象 |
+| `H` | 隐藏/显示已选中对象 |
+| `Esc` | 清除选择 |
+| 参数面板 | 拖动滑块实时调整 splat 缩放比例/透明度 |
 
-## The one version-specific bit
+## 版本兼容性说明
 
-`DisplayParamUI` drives the renderer's display fields **by reflection**, so our scripts
-compile before the plugin is installed and survive plugin updates. If your installed
-version names the splat-scale/opacity fields differently, set the member names on the
-`DisplayParamUI` component in the Inspector — that's the only wiring to verify. Camera,
-selection, and scene-management scripts are fully plugin-agnostic.
+`DisplayParamUI` 通过**反射**驱动渲染器的显示字段，因此我们的脚本无需先安装插件即可编译，且在插件更新后仍可正常使用。若已安装版本中 splat 缩放/透明度字段名称不同，请在 Inspector 的 `DisplayParamUI` 组件上设置对应的成员名称——这是唯一需要验证的连接点。相机、选择和场景管理脚本与插件完全解耦。
 
-## Files
+## 文件说明
 
-| Script | Role |
+| 脚本 | 职责 |
 |---|---|
-| `OrbitCameraController.cs` | browse / zoom / pan; `Frame(Bounds)` for focus |
-| `SplatSceneManager.cs` | registry + click-to-select + F/H/Esc routing |
-| `SplatSelectable.cs` | per-object pick proxy (collider bounds) + highlight |
-| `DisplayParamUI.cs` | runtime sliders → `GaussianSplatRenderer` (via reflection) |
+| `OrbitCameraController.cs` | 浏览 / 缩放 / 平移；`Frame(Bounds)` 用于聚焦 |
+| `SplatSceneManager.cs` | 注册表 + 点击选择 + F/H/Esc 路由 |
+| `SplatSelectable.cs` | 单对象拾取代理（碰撞体边界）+ 高亮 |
+| `DisplayParamUI.cs` | 运行时滑块 → `GaussianSplatRenderer`（通过反射） |
 
-VR / advanced manipulation (clarte53 viewer, VR-GS-style grab/deform):
-[`../docs/07-extensions.md`](../docs/07-extensions.md).
+VR / 高级操作（clarte53 查看器，VR-GS 风格抓取/变形）：
+[`../docs/07-extensions.md`](../docs/07-extensions.md)。

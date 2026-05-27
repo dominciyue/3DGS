@@ -1,76 +1,66 @@
-# 01 · Roadmap & Task Split
+# 01 · 路线图与任务分工
 
-Timeline from the proposal: **Week 13–14** basic pipeline · **Week 15** render
-optimization + advanced extensions · **Week 16** results demo. (Today's anchor for
-status tracking: 2026-05-27.)
+提案中的时间线：**第 13–14 周** 基础流水线 · **第 15 周** 渲染优化 + 高级扩展 · **第 16 周** 成果演示。（进度追踪基准日期：2026-05-27。）
 
-## Guiding strategy: close the last mile first
+## 指导策略：优先打通最后一公里
 
-The biggest risk is integration, not any single component. So we **build the
-pipeline back-to-front**:
+最大的风险在于集成，而非任何单一组件。因此我们**从后往前构建流水线**：
 
-1. **First** get a *pre-trained, public* 3DGS `.ply` rendering and interactive in
-   Unity. Now the team always has a demo, and the Unity/interaction work (郑宇轩,
-   朱越) is unblocked without waiting on training.
-2. **Then** get the Inria trainer producing a `.ply` from a known good image set.
-3. **Then** wire the Agent + backend + frontend in front of it.
-4. **Only then** add extensions (Mip-Splatting, 2DGS, relighting, VR).
+1. **第一步** 先让某个*预训练的公开* 3DGS `.ply` 在 Unity 中渲染并可交互。这样团队随时有可演示的成果，Unity/交互方向的工作（郑宇轩、朱越）无需等待训练完成即可推进。
+2. **第二步** 让 Inria 训练器从已知良好的图像集生成 `.ply`。
+3. **第三步** 在其前面接入 Agent + 后端 + 前端。
+4. **第四步** 再添加扩展功能（Mip-Splatting、2DGS、重光照、VR）。
 
-This way every week ends with something runnable.
+这样每周结束时都有可运行的成果。
 
-## Milestones
+## 里程碑
 
-### M0 — Foundations (now → end of Week 13)
-- [x] Repo scaffold, `.gitignore`, docs, backend/frontend/unity skeletons
-- [ ] Each member has their environment working (see `04-getting-started.md`)
-- [ ] **Unity renders a public sample `.ply`** (aras-p plugin) — *the unblocking milestone*
-- [ ] Backend API + frontend talk to each other in **mock pipeline** mode (no GPU)
+### M0 — 基础搭建（即刻 → 第 13 周末）
+- [x] 仓库脚手架、`.gitignore`、文档、后端/前端/Unity 框架
+- [ ] 每位成员的开发环境就绪（见 `04-getting-started.md`）
+- [ ] **Unity 渲染公开示例 `.ply`**（aras-p 插件）——*解锁里程碑*
+- [ ] 后端 API + 前端在 **mock 模式（占位/模拟）** 下互通（无需 GPU）
 
-### M1 — Baseline end-to-end pipeline (Week 13–14) — *the required deliverable*
-- [ ] COLMAP runs on a sample image set (via `convert.py`) → poses + sparse cloud
-- [ ] Inria 3DGS trains → `point_cloud.ply`
-- [ ] `convert` + `package` stages locate the final `.ply` and expose it for download
-- [ ] Agent planner turns a NL request into a concrete pipeline config (real or mock LLM)
-- [ ] Frontend: upload → run → live progress/logs → download model
-- [ ] Unity: import produced `.ply`; interactions: **orbit, zoom, pan, select, display-param sliders**
-- [ ] One full demo scene reconstructed from our own photos
+### M1 — 基线端到端流水线（第 13–14 周）——*必须完成的交付物*
+- [ ] COLMAP 在示例图像集上运行（通过 `convert.py`）→ 位姿 + 稀疏点云
+- [ ] Inria 3DGS 训练 → `point_cloud.ply`
+- [ ] `convert` + `package` 阶段定位最终 `.ply` 并提供下载
+- [ ] Agent 规划器将自然语言请求转化为具体流水线配置（真实或 mock LLM）
+- [ ] 前端：上传 → 运行 → 实时进度/日志 → 下载模型
+- [ ] Unity：导入生成的 `.ply`；交互功能：**环绕旋转、缩放、平移、选择、显示参数滑块**
+- [ ] 从我们自己拍摄的照片完整重建一个演示场景
 
-### M2 — Optimization & extensions (Week 15)
-- [ ] **Mip-Splatting** path (anti-aliasing) selectable by the Agent — see `07-extensions.md`
-- [ ] Render optimization in Unity (quality vs. perf presets; LOD/culling notes)
-- [ ] Pick **one** advanced track and land it: 2DGS *or* Relightable 3DGS *or* VR viewer
-- [ ] Scene organization: multiple objects in one scene; per-object selection
+### M2 — 优化与扩展（第 15 周）
+- [ ] **Mip-Splatting** 路径（抗锯齿）可由 Agent 选择——见 `07-extensions.md`
+- [ ] Unity 渲染优化（质量与性能预设；LOD/裁剪说明）
+- [ ] 选择**一个**高级方向并完成落地：2DGS *或* Relightable 3DGS *或* VR 查看器
+- [ ] 场景组织：单场景多对象；按对象选择
 
-### M3 — Polish & demo (Week 16)
-- [ ] 3–5 example scenes; short capture-to-Unity walkthrough
-- [ ] Demo script + slides; record fallback video in case of live-demo risk
-- [ ] README/docs final pass; tag a release; attach sample `.ply` assets to the Release
+### M3 — 打磨与演示（第 16 周）
+- [ ] 3–5 个示例场景；录制从拍摄到 Unity 的完整流程演示
+- [ ] 演示脚本 + 幻灯片；录制备用视频以应对现场演示风险
+- [ ] README/文档最终审查；打标签发布；将示例 `.ply` 资源附至 Release
 
-## Task split (from the deck)
+## 任务分工（源自幻灯片）
 
-| Member | Responsibility | Main files/dirs | First concrete task |
+| 成员 | 职责 | 主要文件/目录 | 第一个具体任务 |
 |---|---|---|---|
-| **许可 Xu Ke** | Agent orchestration + 3DGS setup | `backend/app/agent`, `backend/app/pipeline`, `third_party/` | Get COLMAP + Inria trainer producing a `.ply`; wire the `train`/`colmap` stages to real subprocess calls |
-| **郑宇轩 Zheng Yuxuan** | Unity scene import/organization + render optimization | `unity/`, `docs/06`, `docs/07` | Render a public `.ply` in Unity 6 via aras-p; set up scene organization + quality presets |
-| **朱越 Zhu Yue** | Frontend interface + interaction | `frontend/`, `unity/Assets/Scripts` (interaction) | Polish the dashboard; implement the Unity interaction scripts (orbit/select/params) |
+| **许可 Xu Ke** | Agent 编排 + 3DGS 环境搭建 | `backend/app/agent`, `backend/app/pipeline`, `third_party/` | 让 COLMAP + Inria 训练器生成 `.ply`；将 `train`/`colmap` 阶段接入真实子进程调用 |
+| **郑宇轩 Zheng Yuxuan** | Unity 场景导入/组织 + 渲染优化 | `unity/`, `docs/06`, `docs/07` | 通过 aras-p 在 Unity 6 中渲染公开 `.ply`；搭建场景组织结构 + 质量预设 |
+| **朱越 Zhu Yue** | 前端界面 + 交互 | `frontend/`, `unity/Assets/Scripts`（交互） | 完善仪表盘；实现 Unity 交互脚本（环绕旋转/选择/参数调节） |
 
-Interfaces between members are the **REST API** (`docs/02-architecture.md` §API) and
-the **`.ply` contract** (`docs/05-pipeline.md`) — agree on these early so work
-proceeds in parallel.
+成员之间的接口是 **REST API**（`docs/02-architecture.md` §API）和 **`.ply` 接口约定**（`docs/05-pipeline.md`）——请尽早达成一致，以便并行推进工作。
 
-## Risk register (from the proposal, with mitigations)
+## 风险登记册（源自提案，附缓解措施）
 
-| Risk | Mitigation |
+| 风险 | 缓解措施 |
 |---|---|
-| 3DGS env config / GPU/VRAM demands | Use a smaller-VRAM config; `--SiftExtraction.use_gpu 0` fallback; rent a GPU box; keep a public `.ply` for the demo. |
-| Agent non-determinism / tool-call errors | Agent only *configures* a deterministic DAG; every stage validates I/O and is retryable; mock planner as fallback. |
-| Unity format incompatibility | Standardize on Inria `.ply` + aras-p importer (known-good); convert/version-check in the `convert` stage. |
-| Render perf bottlenecks / stutter | Quality presets, GPU sort, decimation/compression, Mip-Splatting for stability; profile early. |
-| Optimization is hard | Treat extensions as *optional* M2 tracks; baseline (M1) never depends on them. |
+| 3DGS 环境配置 / GPU/VRAM 需求 | 使用较小 VRAM 配置；`--SiftExtraction.use_gpu 0` 回退方案；租用 GPU 服务器；保留公开 `.ply` 用于演示。 |
+| Agent 不确定性 / 工具调用错误 | Agent 仅*配置*确定性 DAG；每个阶段均验证输入/输出且可重试；mock 模式（占位/模拟）规划器作为回退。 |
+| Unity 格式不兼容 | 标准化使用 Inria `.ply` + aras-p 导入器（已知可用）；在 `convert` 阶段进行转换/版本检查。 |
+| 渲染性能瓶颈 / 卡顿 | 质量预设、GPU 排序、抽稀/压缩、Mip-Splatting 提升稳定性；尽早进行性能分析。 |
+| 优化难度大 | 将扩展功能视为*可选* M2 方向；基线（M1）始终不依赖它们。 |
 
-## Definition of done (baseline)
+## 完成标准（基线）
 
-A teammate on a fresh machine can: start the backend + frontend, drop in a photo
-set, watch the Agent run the pipeline, download a `.ply`, open the Unity project,
-import it, and **orbit / zoom / pan / select an object / change a display
-parameter** — all documented in `docs/`.
+团队成员在一台全新机器上可以：启动后端 + 前端，拖入一组照片，观察 Agent 运行流水线，下载 `.ply`，打开 Unity 项目，导入文件，并完成**环绕旋转 / 缩放 / 平移 / 选择对象 / 更改显示参数**——所有步骤均在 `docs/` 中有文档记录。

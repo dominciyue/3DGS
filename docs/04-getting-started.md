@@ -1,17 +1,16 @@
-# 04 · Getting Started (Environment Setup)
+# 04 · 快速入门（环境配置）
 
-There are **three independent environments**. You do **not** need all three to start
-contributing — pick the one for your role and use mock mode for the rest.
+共有**三个相互独立的环境**。你**不需要**全部配置好才能开始贡献代码——根据你的分工选择对应的环境，其余部分使用 mock 模式（占位/模拟）即可。
 
-| Env | Who | Needs a GPU? |
+| 环境 | 对应成员 | 是否需要 GPU？ |
 |---|---|---|
-| A. Backend + frontend (mock pipeline) | everyone | ❌ no |
-| B. Real 3DGS reconstruction (COLMAP + Inria trainer) | 许可 | ✅ CUDA GPU |
-| C. Unity viewer | 郑宇轩, 朱越 | 🟡 a decent GPU, no CUDA needed |
+| A. 后端 + 前端（mock 流水线） | 所有人 | ❌ 不需要 |
+| B. 真实 3DGS 重建（COLMAP + Inria 训练器） | 许可 | ✅ 需要 CUDA GPU |
+| C. Unity 查看器 | 郑宇轩, 朱越 | 🟡 需要性能较好的 GPU，无需 CUDA |
 
 ---
 
-## A. Backend + frontend — runs anywhere (start here)
+## A. 后端 + 前端——在任何机器上均可运行（从这里开始）
 
 ```bash
 # Backend (Python 3.10+)
@@ -28,28 +27,23 @@ pytest -q
 cd frontend && python -m http.server 5173   # http://localhost:5173
 ```
 
-With `PIPELINE_MOCK=1` (the default), the pipeline produces a synthetic `.ply` so you
-can exercise the whole flow — upload → agent plan → staged progress → download —
-without a GPU. This is enough to build and test the API, the Agent, and the UI.
+将 `PIPELINE_MOCK=1`（默认值）时，流水线会生成一个合成的 `.ply` 文件，让你可以走完整个流程——上传 → Agent 规划 → 分阶段进度展示 → 下载——而无需 GPU。这已足够用于开发和测试 API、Agent 和 UI。
 
-**LLM key (optional):** without `ANTHROPIC_API_KEY` the Agent uses a deterministic
-`MockPlanner`. With a key it uses Claude tool-use. Either way the pipeline is the same.
+**LLM 密钥（可选）：** 不设置 `ANTHROPIC_API_KEY` 时，Agent 使用确定性的 `MockPlanner`；设置后则使用 Claude tool-use。无论哪种方式，流水线本身保持不变。
 
 ---
 
-## B. Real 3DGS reconstruction — needs CUDA
+## B. 真实 3DGS 重建——需要 CUDA
 
-Requirements (verified against the Inria repo): a CUDA-ready GPU (**compute ≥ 7.0**,
-**~24 GB VRAM** for full quality; less works with smaller batches/resolution),
-**COLMAP**, and **ImageMagick**.
+依赖要求（已在 Inria 仓库验证）：支持 CUDA 的 GPU（**算力 ≥ 7.0**，**~24 GB VRAM** 以获得完整质量；使用较小的批次/分辨率时可适当降低），以及 **COLMAP** 和 **ImageMagick**。
 
 ### 1. COLMAP
-- Linux: `sudo apt install colmap` (or build from source for CUDA features).
-- Windows: download the prebuilt binary from https://colmap.github.io/ and add to PATH.
-- Verify: `colmap -h`. If feature extraction lacks a GPU, the convert step can pass
-  `--SiftExtraction.use_gpu 0 --SiftMatching.use_gpu 0` (slower, CPU-only).
+- Linux：`sudo apt install colmap`（或从源码编译以启用 CUDA 特性）。
+- Windows：从 https://colmap.github.io/ 下载预编译二进制文件并添加到 PATH。
+- 验证：`colmap -h`。如果特征提取不支持 GPU，convert 步骤可传入
+  `--SiftExtraction.use_gpu 0 --SiftMatching.use_gpu 0`（速度较慢，仅使用 CPU）。
 
-### 2. Inria 3DGS trainer (cloned into `third_party/`, not vendored)
+### 2. Inria 3DGS 训练器（克隆至 `third_party/`，不作为内嵌依赖）
 ```bash
 cd third_party
 git clone https://github.com/graphdeco-inria/gaussian-splatting --recursive
@@ -60,7 +54,7 @@ conda activate gaussian_splatting
 # torch/submodules if environment.yml fails — see the repo's issues.
 ```
 
-### 3. End-to-end smoke test (one known-good scene)
+### 3. 端到端冒烟测试（使用一个已知可行的场景）
 ```bash
 # (a) prepare your own images -> COLMAP poses + sparse cloud
 python convert.py -s /path/to/scene          # scene/input/*.jpg  ->  scene/sparse/0/, images/
@@ -72,37 +66,30 @@ python train.py -s /path/to/scene -m /path/to/output/scene
 #   /path/to/output/scene/point_cloud/iteration_30000/point_cloud.ply
 ```
 
-Point the backend at these tools by setting `COLMAP_BIN`, `GS_REPO_DIR`, and
-`GS_PYTHON` in `backend/.env` (see `.env.example`). The `train`/`colmap` stages then
-shell out to them; otherwise they stay in mock mode.
+通过在 `backend/.env` 中设置 `COLMAP_BIN`、`GS_REPO_DIR` 和 `GS_PYTHON`（参见 `.env.example`），将后端指向这些工具。`train`/`colmap` 阶段随后会调用它们；否则将保持 mock 模式（占位/模拟）。
 
-**Capture tips for good results:** 30–200 photos, lots of overlap (~70–80%), orbit the
-subject at 2–3 heights, even lighting, avoid motion blur and reflective/transparent
-surfaces. Garbage in → garbage splats.
+**拍摄技巧（以获得良好效果）：** 30–200 张照片，大量重叠（约 70–80%），在 2–3 个高度环绕拍摄对象，光线均匀，避免运动模糊以及反光/透明表面。垃圾输入 → 垃圾高斯点（splat）。
 
 ---
 
-## C. Unity viewer — needs Unity 6 (no CUDA)
+## C. Unity 查看器——需要 Unity 6（无需 CUDA）
 
-1. Install **Unity 6 LTS** (Unity Hub).
-2. Create a 3D (URP or Built-in) project, or open `unity/` once a project is created
-   there (only `Assets/`, `Packages/`, `ProjectSettings/` are tracked — see `.gitignore`).
-3. Install **aras-p/UnityGaussianSplatting** (Package Manager → Add from git URL, or
-   clone and add the local package). Follow its README.
-4. Copy our scripts from `unity/Assets/Scripts/` into the project.
-5. Import a `.ply` (a public sample to start) and press Play. Full steps: `docs/06`.
+1. 安装 **Unity 6 LTS**（Unity Hub）。
+2. 创建一个 3D（URP 或 Built-in）项目，或在创建项目后打开 `unity/`（仅跟踪 `Assets/`、`Packages/`、`ProjectSettings/`——详见 `.gitignore`）。
+3. 安装 **aras-p/UnityGaussianSplatting**（Package Manager → Add from git URL，或克隆后添加本地包）。参照其 README 进行操作。
+4. 将我们的脚本从 `unity/Assets/Scripts/` 复制到项目中。
+5. 导入一个 `.ply` 文件（可先使用公开示例）并点击 Play。完整步骤见 `docs/06`。
 
-GPU: any modern discrete GPU handles a few hundred-thousand to a few-million splats.
-Lower the splat count / use the importer's compression if it stutters.
+GPU：任何现代独立 GPU 均可处理数十万至数百万个高斯点（splat）。如果出现卡顿，可降低高斯点（splat）数量或使用导入器的压缩功能。
 
 ---
 
-## Troubleshooting quick hits
+## 常见问题快速排查
 
-| Symptom | Fix |
+| 现象 | 解决方法 |
 |---|---|
-| `submodule diff-gaussian-rasterization` build fails | ensure CUDA toolkit matches your PyTorch; clone with `--recursive`; check repo issues for your GPU gen |
-| COLMAP finds too few images / fails to register | more overlap, more photos, better texture; try sequential matcher for video frames |
-| Unity: "PLY is probably not a Gaussian Splat file" | it must be the **3DGS** `.ply` (per-Gaussian attrs), not a plain point cloud |
-| Out of VRAM during training | lower `-r` (resolution), reduce densification, or train on CPU data loading |
-| Agent does nothing / errors on key | leave `ANTHROPIC_API_KEY` unset to use the mock planner |
+| `submodule diff-gaussian-rasterization` 编译失败 | 确认 CUDA toolkit 与 PyTorch 版本匹配；使用 `--recursive` 克隆；在仓库 issues 中查找对应 GPU 型号的解决方案 |
+| COLMAP 识别到的图片太少 / 注册失败 | 增加重叠度、增加照片数量、保证纹理丰富；视频帧可尝试 sequential matcher |
+| Unity 提示 "PLY is probably not a Gaussian Splat file" | 必须使用 **3DGS** 格式的 `.ply`（含逐高斯属性），而非普通点云文件 |
+| 训练时 VRAM 不足 | 降低 `-r`（分辨率），减少致密化，或使用 CPU 数据加载进行训练 |
+| Agent 无响应 / 密钥报错 | 不设置 `ANTHROPIC_API_KEY` 以使用 mock 规划器 |

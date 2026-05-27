@@ -1,70 +1,45 @@
-# 00 · Project Overview
+# 00 · 项目概述
 
-## Goal
+## 目标
 
-Build an **Agent-driven system that turns images into an interactive 3D Gaussian
-Splatting scene inside Unity**. The user provides photos through a web UI; an LLM
-Agent automatically schedules 3DGS reconstruction, format conversion, scene
-organization, render optimization, and Unity import; the output is a scene the
-user can browse, zoom, move, select, and tune in Unity.
+构建一套 **Agent 驱动的系统，将图像转化为 Unity 中的交互式 3D 高斯泼溅（3DGS）场景**。用户通过网页界面提供照片；LLM Agent 自动调度 3DGS 重建、格式转换、场景组织、渲染优化与 Unity 导入；最终输出一个用户可在 Unity 中浏览、缩放、移动、选择并调节参数的场景。
 
-This is the system described in our 开题答辩 (proposal defense) and the 13组 slide
-deck (both archived in [`assets/`](assets/)).
+这正是我们在开题答辩及 13组幻灯片中所描述的系统（均归档于 [`assets/`](assets/)）。
 
-## The one-paragraph pitch
+## 一段话概述
 
-3DGS represents a scene as millions of colored, oriented 3D Gaussian "blobs"
-instead of a mesh, a voxel grid, or a NeRF MLP. It renders in real time on a GPU
-(rasterization, no per-pixel neural net), which makes it a great fit for Unity and
-VR. But producing a 3DGS scene from raw photos is *not* one click — it is a
-multi-tool pipeline (image prep → COLMAP camera estimation → Gaussian training →
-format conversion → engine import → scene wiring). We use an **Agent** to drive
-that pipeline from a single natural-language request, and Unity to make the result
-interactive.
+3DGS 将场景表示为数百万个带颜色、有朝向的三维高斯"斑块"，而非网格、体素网格或 NeRF MLP。它在 GPU 上实时渲染（光栅化，无逐像素神经网络），因此非常适合 Unity 和 VR。但从原始照片生成 3DGS 场景*并非*一键完成——它是一条多工具流水线（图像预处理 → COLMAP 相机位姿估计 → 高斯训练 → 格式转换 → 引擎导入 → 场景接线）。我们使用 **Agent** 从单条自然语言请求驱动整条流水线，并通过 Unity 让结果变得可交互。
 
-## Why each piece exists
+## 各模块存在的理由
 
-| Piece | Why it's here |
+| 模块 | 存在原因 |
 |---|---|
-| **3DGS** | Recovers 3D geometry + appearance from photos; renders in real time; engine/VR-friendly. |
-| **COLMAP / SfM** | 3DGS needs per-image camera poses + a sparse point cloud to initialize from. COLMAP produces both. |
-| **Agent** | Chains the tools, picks parameters, decides on optional stages, recovers from errors — from one NL request. |
-| **Unity** | Turns a static `.ply` into an interactive experience (camera control, selection, parameter tuning, eventually VR). |
+| **3DGS** | 从照片中恢复三维几何与外观；实时渲染；对引擎/VR 友好。 |
+| **COLMAP / SfM** | 3DGS 需要每张图像的相机位姿 + 稀疏点云作为初始化输入，COLMAP 可同时提供两者。 |
+| **Agent** | 串联各工具、选择参数、决定可选阶段、从错误中恢复——源自单条自然语言请求。 |
+| **Unity** | 将静态 `.ply` 变为可交互体验（相机控制、选择、参数调节，最终支持 VR）。 |
 
-## Glossary (terms used across the docs)
+## 术语表（文档全局适用）
 
-- **3DGS / Gaussian Splatting** — scene = set of 3D Gaussians, each with position,
-  covariance (≈ orientation + scale), opacity, and view-dependent color (spherical
-  harmonics). Rendered by projecting ("splatting") each Gaussian to the image and
-  alpha-blending front-to-back.
-- **SfM (Structure-from-Motion)** — recovering camera poses + sparse 3D points from
-  overlapping images. We use **COLMAP**.
-- **`.ply`** — the file the Inria trainer writes (`point_cloud/iteration_30000/
-  point_cloud.ply`); it stores per-Gaussian attributes. This is the artifact we move
-  into Unity.
-- **Densification / pruning** — during training, Gaussians are split/cloned in
-  under-reconstructed regions and removed where transparent, controlling detail.
-- **Mip-Splatting** — anti-aliasing variant: scale-aware filtering so the scene stays
-  stable across zoom levels (no shimmering when far away).
-- **2DGS** — replaces 3D ellipsoids with oriented 2D disks → better surfaces/meshes.
-- **Relightable 3DGS** — bakes material/normal/lighting so the scene can be relit.
-- **Splat / SPZ** — compact binary formats for Gaussian models (SPZ = Scaniverse's
-  compressed format; supported by the aras-p Unity importer).
+- **3DGS / Gaussian Splatting** — 场景 = 一组 3D 高斯，每个高斯具有位置、协方差（≈ 朝向 + 缩放）、不透明度及视角相关颜色（球谐函数）。渲染时将每个高斯投影（"泼溅"）至图像并按从前到后的顺序 alpha 混合。
+- **SfM（Structure-from-Motion，运动恢复结构）** — 从重叠图像中恢复相机位姿 + 稀疏三维点。我们使用 **COLMAP**。
+- **`.ply`** — Inria 训练器写出的文件（`point_cloud/iteration_30000/point_cloud.ply`）；存储每个高斯点（splat）的属性。这是我们移入 Unity 的交付物。
+- **致密化 / 剪枝** — 训练过程中，在重建不足的区域分裂/克隆高斯，并移除透明的高斯，从而控制细节密度。
+- **Mip-Splatting** — 抗锯齿变体：尺度感知滤波，使场景在不同缩放级别下保持稳定（远处观察无闪烁）。
+- **2DGS** — 用有朝向的二维圆盘取代三维椭球体 → 更好的表面/网格效果。
+- **Relightable 3DGS** — 烘焙材质/法线/光照信息，使场景可重光照。
+- **Splat / SPZ** — 高斯模型的紧凑二进制格式（SPZ = Scaniverse 压缩格式；aras-p Unity 导入器支持）。
 
-## Success criteria (from the proposal)
+## 成功标准（源自提案）
 
-**Baseline (must-have):** an end-to-end pipeline — *input images → a 3DGS scene
-loadable & interactive in Unity*, with basic browse / zoom / move / select /
-display-parameter interactions.
+**基线（必须实现）：** 端到端流水线——*输入图像 → 可在 Unity 中加载并交互的 3DGS 场景*，支持基本的浏览/缩放/移动/选择/显示参数调节交互。
 
-**Advanced (stretch):** relighting or approximate relighting; Mip-Splatting /
-anti-aliasing; 2DGS planar/surface representation; VR viewing.
+**进阶（扩展目标）：** 重光照或近似重光照；Mip-Splatting 抗锯齿；2DGS 平面/表面表示；VR 观看。
 
-**Deliverables:** a Unity demo, a frontend task UI, an Agent backend scheduler, and
-a handful of example scenes reconstructed from input photos.
+**交付物：** Unity 演示、前端任务界面、Agent 后端调度器，以及若干从输入照片重建的示例场景。
 
-## Read next
+## 延伸阅读
 
-- New to the codebase? → [`04-getting-started.md`](04-getting-started.md)
-- Want the plan & who-does-what? → [`01-roadmap.md`](01-roadmap.md)
-- Want the design rationale? → [`02-architecture.md`](02-architecture.md)
+- 初次接触代码库？→ [`04-getting-started.md`](04-getting-started.md)
+- 想了解计划与分工？→ [`01-roadmap.md`](01-roadmap.md)
+- 想了解设计理念？→ [`02-architecture.md`](02-architecture.md)

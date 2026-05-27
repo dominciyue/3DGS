@@ -1,106 +1,103 @@
-# 07 · Advanced Extensions (Stretch Goals)
+# 07 · 高级扩展（进阶目标）
 
-These are the proposal's "进阶成果". **None block the baseline (M1).** Each is an
-*alternate or additional* pipeline backend the Agent can select, or a Unity-side
-feature. Pick **one or two** for M2 (Week 15) — don't spread thin.
+这些是提案中的"进阶成果"。**均不阻塞基础成果（M1）。** 每项都是
+Agent 可选择的*备选或附加*训练后端，或 Unity 端功能。
+为 M2（第 15 周）选取**一两项**——不要贪多。
 
-Difficulty / payoff at a glance:
+难度与收益一览：
 
-| Extension | Effort | Where it changes things | Recommended? |
+| 扩展 | 工作量 | 影响范围 | 推荐度 |
 |---|---|---|---|
-| **Mip-Splatting** (anti-aliasing) | 🟢 low–med | `train` backend + Unity render | ⭐ best first extension |
-| **VR viewer** | 🟡 med | swap Unity viewer (clarte53) | ⭐ great demo if hardware allows |
-| **2DGS** (surfaces/mesh) | 🟡 med | `train` backend + converter/viewer | strong if you want geometry/mesh |
-| **Relightable 3DGS** | 🔴 high | `train` + render path | most impressive, most work |
-| **Single-image generative** | 🔴 high | new front stage (generative) | research-y; only if time |
+| **Mip-Splatting**（抗锯齿） | 🟢 低–中 | `train` 训练后端 + Unity 渲染 | ⭐ 最佳首选扩展 |
+| **VR 查看器** | 🟡 中 | 替换 Unity 查看器（clarte53） | ⭐ 如硬件允许效果极佳 |
+| **2DGS**（表面/网格） | 🟡 中 | `train` 训练后端 + 转换器/查看器 | 若需几何/网格效果较强 |
+| **Relightable 3DGS** | 🔴 高 | `train` + 渲染路径 | 最炫目，工作量最大 |
+| **单图生成式重建** | 🔴 高 | 新的前置阶段（生成式） | 偏研究性；仅在时间充裕时尝试 |
 
 ---
 
-## A. Mip-Splatting — anti-aliasing  ⭐ start here
+## A. Mip-Splatting —— 抗锯齿  ⭐ 从这里开始
 
-**What:** alias-free 3DGS that stays stable across zoom/resolution (`docs/03 §3.3`).
+**简介：** 无走样的 3DGS，在缩放/分辨率变化时保持稳定（`docs/03 §3.3`）。
 
-**Integration:** add a trainer backend. Clone
-`https://github.com/autonomousvision/mip-splatting` into `third_party/`; it's a
-near-drop-in fork of the Inria trainer, so `train.py` gains
-`backend="mip"` → run the mip trainer instead of vanilla. Output is still a `.ply`
-the aras-p importer reads. The Agent selects it when the user asks for
-"anti-aliased / stable when zoomed out / no shimmering."
+**集成方式：** 添加一个训练后端。将
+`https://github.com/autonomousvision/mip-splatting` 克隆到 `third_party/`；
+它是 Inria 训练器的近乎即插即用的分支，因此 `train.py` 增加
+`backend="mip"` → 运行 mip 训练器而非原版。输出仍为 `.ply`
+文件，aras-p 导入器可直接读取。当用户要求
+"抗锯齿 / 缩小后依然稳定 / 无闪烁"时，Agent 将选择此后端。
 
-**Demo:** side-by-side vanilla vs. mip at a far zoom — the shimmer difference sells it.
-
----
-
-## B. VR viewing  ⭐ (if you have the hardware)
-
-**What:** view/walk the scene in a headset.
-
-**Integration:** swap the Unity viewer for
-`https://github.com/clarte53/GaussianSplattingVRViewerUnity` (Unity 2022, OpenXR +
-DX11, native CUDA rasterizer, **> RTX 4070**, headset as default OpenXR runtime). Keep
-the same `.ply` contract. Our `OrbitCameraController` is desktop-only, so VR uses the
-viewer's XR rig; `SplatSceneManager`/selection concepts still apply.
-
-**Stretch within stretch — interaction:** VR-GS (`docs/03 §3.6`) does physics-aware
-grab/deform via a deformable cage around groups of Gaussians. A *lite* version:
-select a splat group (bounds proxy) and move/scale it with the controller.
+**演示效果：** 在远处缩放时并排对比原版与 mip——闪烁差异一目了然。
 
 ---
 
-## C. 2D Gaussian Splatting — surfaces & mesh
+## B. VR 查看  ⭐（如有硬件支持）
 
-**What:** disk-based primitives → clean normals + mesh extraction (`docs/03 §3.4`).
+**简介：** 在头显中查看/行走于场景中。
 
-**Integration:** add `backend="2dgs"` to `train` (clone
-`https://github.com/hbb1/2d-gaussian-splatting`). Its `.ply` semantics differ from 3D
-Gaussians, so it needs its **own viewer/converter** — either use the 2DGS repo's
-renderer, or extract a mesh (TSDF) and import that as a normal Unity mesh. Decide the
-target (splat surfels vs. exported mesh) before starting.
+**集成方式：** 将 Unity 查看器替换为
+`https://github.com/clarte53/GaussianSplattingVRViewerUnity`（Unity 2022，OpenXR +
+DX11，原生 CUDA 光栅化器，**需 RTX 4070 以上**，将头显设为默认 OpenXR 运行时）。
+保持相同的 `.ply` 接口约定。我们的 `OrbitCameraController` 仅适用于桌面端，
+因此 VR 使用该查看器的 XR 装置；`SplatSceneManager`/选择概念仍然适用。
 
-**Demo:** show extracted geometry/normals — crisp flat surfaces where vanilla 3DGS is
-fuzzy.
-
----
-
-## D. Relightable 3D Gaussian — relighting
-
-**What:** per-Gaussian BRDF + normals + baked light → relight under new lighting
-(`docs/03 §3.5`).
-
-**Two tiers:**
-- **Full:** train with `https://github.com/NJU-3DV/Relightable3DGaussian`
-  (`backend="relight"`); needs its custom render path in Unity → heaviest option.
-- **Approximate (lighter, recommended fallback):** estimate normals for the splats and
-  apply a simple BRDF + a movable light in a custom Unity shader over the existing
-  `.ply`. Not physically exact, but demonstrates "approximate relighting" (which the
-  proposal explicitly allows) at a fraction of the cost.
+**进阶目标中的进阶——交互：** VR-GS（`docs/03 §3.6`）通过围绕高斯组的
+可变形笼体实现物理感知的抓取/形变。*精简版本：*
+通过包围盒代理选中一个高斯点（splat）组，然后用控制器移动/缩放它。
 
 ---
 
-## E. Single-image reconstruction (generative)
+## C. 2D Gaussian Splatting —— 表面与网格
 
-**What:** one photo → 3D, which vanilla 3DGS/COLMAP **cannot** do (needs multiple
-views; `docs/03 §3.7`).
+**简介：** 基于圆盘的基元 → 干净的法线 + 网格提取（`docs/03 §3.4`）。
 
-**Integration:** a new *front* stage before COLMAP — a generative image-to-3D model
-(image/video-diffusion to synthesize novel views, then run the normal pipeline; or a
-feed-forward image→3DGS model). This is a research effort; attempt only with spare
-time, and keep it isolated so it never destabilizes the multi-image baseline.
+**集成方式：** 在 `train` 中添加 `backend="2dgs"`（克隆
+`https://github.com/hbb1/2d-gaussian-splatting`）。其 `.ply` 语义与 3D
+高斯不同，因此需要**专用的查看器/转换器**——可使用 2DGS 仓库的
+渲染器，或提取网格（TSDF）并将其作为普通 Unity 网格导入。
+开始前先确定目标（高斯点（splat）表面元素 vs. 导出网格）。
+
+**演示效果：** 展示提取的几何/法线——原版 3DGS 模糊的地方，这里呈现清晰的平整表面。
 
 ---
 
-## How the Agent chooses an extension
+## D. Relightable 3D Gaussian —— 重光照
 
-The `train.backend` field in `PipelineConfig` (`docs/05`) is the switch. The Agent
-maps user phrasing → backend:
+**简介：** 逐高斯 BRDF + 法线 + 烘焙光照 → 在新光照条件下重光照
+（`docs/03 §3.5`）。
 
-| User says… | Agent picks |
+**两个层级：**
+- **完整版：** 使用 `https://github.com/NJU-3DV/Relightable3DGaussian` 训练
+  （`backend="relight"`）；需要在 Unity 中实现其自定义渲染路径 → 工作量最大。
+- **近似版（更轻量，推荐作为备用方案）：** 为高斯点（splat）估算法线，并在现有
+  `.ply` 上通过自定义 Unity 着色器应用简单的 BRDF + 可移动光源。
+  物理上不精确，但能以极低成本演示"近似重光照"（提案中明确允许）。
+
+---
+
+## E. 单图重建（生成式）
+
+**简介：** 单张照片 → 3D，这是原版 3DGS/COLMAP **无法**完成的
+（需要多视角图像；`docs/03 §3.7`）。
+
+**集成方式：** 在 COLMAP 之前增加一个新的*前置*阶段——一个生成式图像到 3D 的模型
+（利用图像/视频扩散模型合成新视角，再运行正常流程；或使用前馈式图像→3DGS 模型）。
+这是一项研究性工作；仅在有余裕时尝试，并保持其独立性，
+避免影响多图像基础成果的稳定性。
+
+---
+
+## Agent 如何选择扩展
+
+`PipelineConfig`（`docs/05`）中的 `train.backend` 字段是切换开关。Agent
+将用户表述映射到训练后端：
+
+| 用户说… | Agent 选择 |
 |---|---|
-| "anti-aliased", "stable when far", "no flicker" | `mip` |
-| "I want the surface / a mesh / flat walls clean" | `2dgs` |
-| "relight it", "change the lighting" | `relight` (or approximate path) |
-| (default) | `vanilla` |
+| "抗锯齿"、"远处也稳定"、"不闪烁" | `mip` |
+| "我想要表面 / 网格 / 平整的墙面" | `2dgs` |
+| "重光照"、"改变光照" | `relight`（或近似路径） |
+| （默认） | `vanilla` |
 
-Each backend must be installed in `third_party/` and enabled via `backend/.env`;
-otherwise the stage reports a clear "backend not installed" error and the Agent falls
-back to `vanilla`.
+每个训练后端必须安装在 `third_party/` 中，并通过 `backend/.env` 启用；
+否则该阶段将报告明确的"后端未安装"错误，Agent 回退到 `vanilla`。

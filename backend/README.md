@@ -1,12 +1,10 @@
-# Backend — Agent + Pipeline (FastAPI)
+# 后端 — Agent + 流水线 (FastAPI)
 
-The orchestration brain: a FastAPI server that accepts images + a natural-language
-instruction, has the **Agent** plan a `PipelineConfig`, and runs a **deterministic
-pipeline** (preprocess → COLMAP → train 3DGS → convert → package) to produce a `.ply`.
+编排核心：一个 FastAPI 服务器，接收图片和自然语言指令，由 **Agent（智能体）** 规划 `PipelineConfig`，并运行**确定性流水线**（预处理 → COLMAP → 训练 3DGS → 转换 → 打包），最终生成 `.ply` 文件。
 
-Design rationale: [`../docs/02-architecture.md`](../docs/02-architecture.md).
+设计原理：[`../docs/02-architecture.md`](../docs/02-architecture.md)。
 
-## Run
+## 运行
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -15,19 +13,17 @@ cp .env.example .env          # optional edits
 uvicorn app.main:app --reload # http://localhost:8000  (interactive docs at /docs)
 ```
 
-`scripts/run_dev.sh` does the `.env` copy + launch for you.
+`scripts/run_dev.sh` 会自动完成 `.env` 复制和服务启动。
 
-It runs in **mock mode by default** (`PIPELINE_MOCK=1`): stages emit synthetic outputs
-and the trained `.ply` is a small but format-correct Gaussian cloud — so the whole
-flow (upload → plan → staged progress → download) works with no GPU, tools, or API key.
+默认以 **mock 模式（占位/模拟）运行**（`PIPELINE_MOCK=1`）：各阶段输出合成结果，训练所得 `.ply` 为体积小但格式正确的高斯点云——因此整个流程（上传 → 规划 → 分阶段进度 → 下载）无需 GPU、工具或 API 密钥即可运行。
 
-## Test
+## 测试
 
 ```bash
 pytest -q          # no GPU / network required
 ```
 
-## Layout
+## 目录结构
 
 ```
 app/
@@ -46,20 +42,17 @@ app/
     └── _ply.py      Gaussian .ply read/write/validate/decimate
 ```
 
-## Going real (GPU)
+## 使用真实 GPU 运行
 
-Set `PIPELINE_MOCK=0` and point the tool paths in `.env` at an installed COLMAP and the
-Inria trainer repo (see [`../docs/04-getting-started.md`](../docs/04-getting-started.md)
-and [`../third_party/README.md`](../third_party/README.md)). Stages that need a missing
-tool fail with an actionable message rather than pretending to work.
+将 `PIPELINE_MOCK=0`，并在 `.env` 中指定已安装的 COLMAP 和 Inria 训练器仓库的路径（参见 [`../docs/04-getting-started.md`](../docs/04-getting-started.md) 和 [`../third_party/README.md`](../third_party/README.md)）。若某阶段缺少必要工具，将给出明确的错误提示，而不会假装成功。
 
 ## API
 
-| Method | Path | Purpose |
+| 方法 | 路径 | 用途 |
 |---|---|---|
-| GET  | `/api/health` | liveness + mock/LLM flags |
-| POST | `/api/jobs` | multipart `images[]` + `instruction` + optional `preset` → `{job_id}` |
-| GET  | `/api/jobs` · `/api/jobs/{id}` | list / status + config + stage states |
-| GET  | `/api/jobs/{id}/events` | SSE progress + logs |
-| GET  | `/api/jobs/{id}/result` | download `model.ply` |
-| POST | `/api/jobs/{id}/cancel` | request cancellation |
+| GET  | `/api/health` | 存活检测 + mock/LLM 标志 |
+| POST | `/api/jobs` | multipart `images[]` + `instruction` + 可选 `preset` → `{job_id}` |
+| GET  | `/api/jobs` · `/api/jobs/{id}` | 列表 / 状态 + 配置 + 各阶段状态 |
+| GET  | `/api/jobs/{id}/events` | SSE 进度 + 日志 |
+| GET  | `/api/jobs/{id}/result` | 下载 `model.ply` |
+| POST | `/api/jobs/{id}/cancel` | 请求取消任务 |
