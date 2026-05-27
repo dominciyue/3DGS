@@ -1,0 +1,12 @@
+[project]
+name = "3dgs-agent-backend"
+version = "0.1.0"
+description = "Agent-orchestrated pipeline: images -> 3D Gaussian Splatting -> Unity"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100

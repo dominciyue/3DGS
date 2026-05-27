@@ -1,0 +1,189 @@
+# =============================================================================
+# 3DGS-Agent .gitignore
+# Goal: keep source (code, docs, configs) in git; keep heavy/derived/secret
+# artifacts OUT of git. Large 3DGS outputs (.ply/.spz) and datasets are
+# distributed via GitHub Releases / Git LFS, never committed directly.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Secrets & local config  (NEVER commit API keys)
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+
+# ---------------------------------------------------------------------------
+# Python (backend / Agent)
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+.installed.cfg
+*.manifest
+*.spec
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Test / type / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# ---------------------------------------------------------------------------
+# Node / frontend tooling (only if a build step is added later)
+# ---------------------------------------------------------------------------
+node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# ---------------------------------------------------------------------------
+# Runtime data, jobs & 3DGS / ML artifacts  (HEAVY — keep out of git)
+# ---------------------------------------------------------------------------
+# Backend per-job working dirs (uploaded images, intermediates, outputs)
+data/
+backend/data/
+jobs/
+uploads/
+outputs/
+output/
+
+# COLMAP / SfM products
+distorted/
+sparse/
+stereo/
+*.db          # COLMAP database.db
+database.db*
+
+# Trained Gaussian models & generic checkpoints
+*.ply         # 3DGS point clouds are large — ship via Releases/LFS, not git
+*.splat
+*.spz
+*.ckpt
+*.pth
+*.pt
+*.onnx
+*.npz
+point_cloud/
+
+# Datasets / sample captures (input image sets)
+datasets/
+sample_captures/
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# Large media (raw renders / capture videos). Small demo gifs/pngs in docs/
+# are allowed via the docs exception below.
+*.mp4
+*.mov
+*.avi
+
+# ---------------------------------------------------------------------------
+# Unity  (based on github/gitignore Unity.gitignore)
+# Keep: Assets/, ProjectSettings/, Packages/manifest.json, *.cs, *.meta
+# Ignore: generated/cache/build folders.
+# ---------------------------------------------------------------------------
+unity/[Ll]ibrary/
+unity/[Tt]emp/
+unity/[Oo]bj/
+unity/[Bb]uild/
+unity/[Bb]uilds/
+unity/[Ll]ogs/
+unity/[Uu]ser[Ss]ettings/
+unity/[Mm]emoryCaptures/
+unity/[Rr]ecordings/
+unity/.vs/
+unity/.vsconfig
+unity/.gradle/
+unity/ExportedObj/
+unity/crashlytics-build.properties
+
+# Unity-generated IDE project files
+unity/*.csproj
+unity/*.unityproj
+unity/*.sln
+unity/*.suo
+unity/*.tmp
+unity/*.user
+unity/*.userprefs
+unity/*.pidb
+unity/*.booproj
+unity/*.svd
+unity/*.pdb
+unity/*.mdb
+unity/*.opendb
+unity/*.VC.db
+
+# Unity asset packages & built players (large)
+*.unitypackage
+*.app
+*.apk
+*.aab
+*.unity3d
+
+# Unity AssetStore / crash reports
+unity/sysinfo.txt
+unity/Assets/AssetStoreTools*
+unity/Assets/Plugins/Editor/JetBrains*
+
+# IMPORTANT: the Gaussian Splat .ply assets imported into Unity are covered by
+# the global *.ply rule above and must not be committed; provide them via a
+# Release and document the import step instead.
+
+# ---------------------------------------------------------------------------
+# IDE / editor
+# ---------------------------------------------------------------------------
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------------------------------
+# OS junk
+# ---------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# Cloned third-party repos (set up via submodules or setup scripts, not vendored)
+# Keep third_party/README.md and any of our own helper scripts there.
+# ---------------------------------------------------------------------------
+third_party/*/
+!third_party/README.md
+
+# ---------------------------------------------------------------------------
+# Exceptions: keep small documentation assets and the original source decks
+# ---------------------------------------------------------------------------
+!docs/assets/**
