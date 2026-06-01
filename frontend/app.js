@@ -113,23 +113,42 @@ function frameSceneToCamera() {
       { count, sampled: n, center: center.toArray(), size: size.toArray(),
         radius, dist, camPos: cam.position.toArray() });
 
-    // —— 调试: 抽 5 个 splat,把位置/颜色/缩放/透明度全打出来 ——
+    // —— 调试: 抽 5 个 splat 的具体数值 + 主动确保 splat scale 是 1 ——
     try {
       const probe = [];
       for (let i = 0; i < Math.min(5, count); i++) {
         const item = { idx: i };
         const v3 = new THREE.Vector3(), v4 = new THREE.Vector4();
-        if (typeof mesh.getSplatCenter === "function") { mesh.getSplatCenter(i, v3); item.pos = v3.toArray().map(n=>+n.toFixed(3)); }
-        if (typeof mesh.getSplatScale  === "function") { const s=new THREE.Vector3(); mesh.getSplatScale(i, s); item.scale = s.toArray().map(n=>+n.toFixed(4)); }
-        if (typeof mesh.getSplatColor  === "function") { mesh.getSplatColor(i, v4); item.color = v4.toArray().map(n=>+n.toFixed(3)); }
+        if (typeof mesh.getSplatCenter === "function") { mesh.getSplatCenter(i, v3); item.pos = [+v3.x.toFixed(3), +v3.y.toFixed(3), +v3.z.toFixed(3)]; }
+        if (typeof mesh.getSplatScale  === "function") { const s=new THREE.Vector3(); mesh.getSplatScale(i, s); item.scale = [+s.x.toFixed(4), +s.y.toFixed(4), +s.z.toFixed(4)]; }
+        if (typeof mesh.getSplatColor  === "function") { mesh.getSplatColor(i, v4); item.color = [+v4.x.toFixed(3), +v4.y.toFixed(3), +v4.z.toFixed(3), +v4.w.toFixed(3)]; }
         if (typeof mesh.getSplatOpacity=== "function") { item.opacity = +mesh.getSplatOpacity(i).toFixed(3); }
         probe.push(item);
       }
-      console.log("[viewer] first 5 splats:", probe);
-      // 列出 splatMesh 上能调的方法,以防我用错 API 名字
-      const proto = Object.getPrototypeOf(mesh);
-      const methods = Object.getOwnPropertyNames(proto).filter(k => typeof mesh[k] === "function").sort();
-      console.log("[viewer] splatMesh methods:", methods);
+      console.log("[viewer] first 5 splats (JSON):", JSON.stringify(probe));
+
+      // 试着把 splat 大小放大 5x, 万一是默认 scale 太小
+      if (typeof mesh.setSplatScale === "function") {
+        console.log("[viewer] calling setSplatScale(5)…");
+        mesh.setSplatScale(5);
+      }
+
+      // 暴露给 F12 控制台手动调试
+      window.__dbg = {
+        viewer, mesh,
+        setScale: (s) => { mesh.setSplatScale?.(s); console.log("scale ->", s); },
+        toggleDots: () => {
+          const cur = mesh.getPointCloudModeEnabled?.() ?? false;
+          mesh.setPointCloudModeEnabled?.(!cur);
+          console.log("point cloud mode ->", !cur);
+        },
+        info: () => ({
+          count: mesh.getSplatCount(),
+          scenes: mesh.getSceneCount?.(),
+          pointCloud: mesh.getPointCloudModeEnabled?.(),
+        }),
+      };
+      console.log("[viewer] 控制台调试:__dbg.toggleDots() / __dbg.setScale(N) / __dbg.info()");
     } catch (e) { console.warn("probe failed:", e); }
   } catch (e) {
     console.warn("frameSceneToCamera failed:", e);
