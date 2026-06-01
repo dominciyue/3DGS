@@ -128,10 +128,11 @@ function frameSceneToCamera() {
       }
       console.log("[viewer] first 5 splats (JSON):", JSON.stringify(probe));
 
-      // 暴力降低 splat 尺寸 → 减少叠加 → 不再过曝 (临时手段, 待找根因)
+      // 全局 splat 尺寸 — 用户在 0.3/0.5/0.7/1.0 之间试,选定 0.7 作为默认.
+    // 1.0 (库默认) 在 Inria 训练场景下会过曝; 0.7 ≈ Unity aras-p 视感.
       if (typeof mesh.setSplatScale === "function") {
-        console.log("[viewer v5] forcing setSplatScale(0.3) to fight over-bright");
-        mesh.setSplatScale(0.3);
+        mesh.setSplatScale(0.7);
+        console.log("[viewer v6] setSplatScale(0.7)  — 控制台 __dbg.setScale(N) 可微调");
       }
 
       // 暴露给 F12 控制台手动调试
