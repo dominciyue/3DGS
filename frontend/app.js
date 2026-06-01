@@ -128,10 +128,10 @@ function frameSceneToCamera() {
       }
       console.log("[viewer] first 5 splats (JSON):", JSON.stringify(probe));
 
-      // 试着把 splat 大小放大 5x, 万一是默认 scale 太小
+      // 暴力降低 splat 尺寸 → 减少叠加 → 不再过曝 (临时手段, 待找根因)
       if (typeof mesh.setSplatScale === "function") {
-        console.log("[viewer] calling setSplatScale(5)…");
-        mesh.setSplatScale(5);
+        console.log("[viewer v5] forcing setSplatScale(0.3) to fight over-bright");
+        mesh.setSplatScale(0.3);
       }
 
       // 暴露给 F12 控制台手动调试
