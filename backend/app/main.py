@@ -128,6 +128,42 @@ async def cancel_job(job_id: str):
 
 
 # --------------------------------------------------------------------------- #
+# /api/sample  — serve a pre-trained sample .ply for the in-browser viewer, so
+# the frontend can show a real 3DGS scene with one click (no training needed).
+# --------------------------------------------------------------------------- #
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _find_sample_ply() -> Path | None:
+    bases = [REPO_ROOT / "sample-scene", REPO_ROOT / "data" / "sample-scene"]
+    for base in bases:
+        if not base.is_dir():
+            continue
+        cands = sorted(base.glob("point_cloud/iteration_*/point_cloud.ply"),
+                       key=lambda p: int(p.parent.name.split("_")[-1]) if "_" in p.parent.name else -1)
+        if cands:
+            return cands[-1]
+        direct = base / "point_cloud.ply"
+        if direct.is_file():
+            return direct
+    return None
+
+
+@app.get("/api/sample")
+async def sample_scene():
+    """Serve a pre-trained sample .ply if one is available under sample-scene/ or data/sample-scene/."""
+    p = _find_sample_ply()
+    if p is None:
+        raise HTTPException(
+            404,
+            "no sample scene available — extract a trained 3DGS output to "
+            "sample-scene/ (or data/sample-scene/) at the repo root",
+        )
+    return FileResponse(p, media_type="application/octet-stream", filename="sample.ply")
+
+
+# --------------------------------------------------------------------------- #
 # /api/jobs/from-path  — Unity client triggers a job by handing us a server-side
 # folder of images, instead of uploading them via multipart.
 # --------------------------------------------------------------------------- #

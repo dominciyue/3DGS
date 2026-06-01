@@ -1,12 +1,13 @@
-/* 3DGS-Agent 控制台逻辑。与 FastAPI 后端通信（进度走 SSE）。 */
-"use strict";
+/* 3DGS-Agent 浏览器一体化控制台
+ *   左列：任务控制（路径 / 指令 / 预设 / 进度）
+ *   中列：mkkellogg/gaussian-splats-3d 实时渲染 .ply
+ *   右列：Agent 多轮聊天
+ */
+import * as GaussianSplats3D from "@mkkellogg/gaussian-splats-3d";
 
-// API 基址：被后端托管时（任意端口）用同源（""）。
-// 仅独立静态服务器（python -m http.server 5173）或 file:// 才显式指向后端。
 const API = (location.port === "5173" || location.protocol === "file:")
   ? "http://localhost:8000" : "";
 
-// 阶段 key（与后端一致，勿改）→ 中文显示名
 const STAGES = [
   ["preprocess", "预处理图像"],
   ["colmap", "COLMAP · 运动恢复结构 (SfM)"],
@@ -14,20 +15,71 @@ const STAGES = [
   ["convert", "转换 / 校验 .ply"],
   ["package", "打包交付物"],
 ];
-
-// 任务状态 → 中文
 const STATUS_LABEL = {
   queued: "排队中", planning: "规划中", running: "运行中",
   done: "完成", failed: "失败", cancelled: "已取消",
 };
 const statusText = (s) => STATUS_LABEL[s] || s;
-
 const $ = (id) => document.getElementById(id);
-let selectedFiles = [];
-let es = null;            // 当前 EventSource
-let currentJob = null;
 
-/* ----------------------------- 健康状态 ----------------------------- */
+/* ------------------------- gsplat 视口 ------------------------- */
+let viewer = null;
+let viewerStarted = false;
+function ensureViewer() {
+  if (viewer) return viewer;
+  viewer = new GaussianSplats3D.Viewer({
+    rootElement: $("viewer-container"),
+    sphericalHarmonicsDegree: 2,
+    gpuAcceleratedSort: true,
+    sharedMemoryForWorkers: false,   // 避开 COOP/COEP 要求
+    selfDrivenMode: true,
+    useBuiltInControls: true,
+    dynamicScene: false,
+  });
+  return viewer;
+}
+
+function setViewerStatus(text) {
+  const el = $("viewer-status");
+  if (!text) { el.hidden = true; return; }
+  el.hidden = false; el.textContent = text;
+}
+
+async function loadScene(url, label) {
+  $("viewer-hint").hidden = true;
+  setViewerStatus("加载中…");
+  const v = ensureViewer();
+
+  // 移除已有 scene（库的 API 名字在不同版本略有差异，尽量兜底）
+  try {
+    if (typeof v.getSceneCount === "function") {
+      for (let i = v.getSceneCount() - 1; i >= 0; i--) v.removeSplatScene?.(i);
+    } else if (v.splatMesh?.getScene) {
+      while (v.splatMesh.getSceneCount?.() > 0) v.removeSplatScene?.(0);
+    }
+  } catch { /* 老版本 fallback：dispose 后重建 */
+    try { v.dispose?.(); } catch {}
+    viewer = null; viewerStarted = false;
+    ensureViewer();
+  }
+
+  try {
+    await viewer.addSplatScene(url, {
+      showLoadingUI: true,
+      splatAlphaRemovalThreshold: 5,
+      progressiveLoad: true,
+    });
+    if (!viewerStarted) { viewer.start(); viewerStarted = true; }
+    setViewerStatus(label || "");
+    setTimeout(() => setViewerStatus(""), 2500);
+  } catch (e) {
+    console.error(e);
+    setViewerStatus("加载失败：" + e.message);
+    $("viewer-hint").hidden = false;
+  }
+}
+
+/* ------------------------- 健康 ------------------------- */
 async function loadHealth() {
   const el = $("health");
   try {
@@ -38,6 +90,8 @@ async function loadHealth() {
     el.append(badge(h.llm_enabled ? "Claude 智能体" : "mock 智能体",
                     h.llm_enabled ? "badge-ok" : "badge-muted"));
     el.append(badge(`v${h.version}`, "badge-muted"));
+    $("chat-backend").textContent = h.llm_enabled ? "claude" : "mock";
+    $("chat-backend").className = "badge " + (h.llm_enabled ? "badge-ok" : "badge-muted");
   } catch {
     el.innerHTML = "";
     el.append(badge("后端离线", "badge-err"));
@@ -45,87 +99,16 @@ async function loadHealth() {
 }
 function badge(text, cls = "badge-muted") {
   const s = document.createElement("span");
-  s.className = `badge ${cls}`;
-  s.textContent = text;
-  return s;
+  s.className = `badge ${cls}`; s.textContent = text; return s;
 }
 
-/* --------------------------- 选择图片 ----------------------------- */
-const dz = $("dropzone");
-const fileInput = $("file-input");
-dz.addEventListener("click", () => fileInput.click());
-dz.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") fileInput.click(); });
-fileInput.addEventListener("change", () => addFiles(fileInput.files));
-["dragover", "dragenter"].forEach((t) =>
-  dz.addEventListener(t, (e) => { e.preventDefault(); dz.classList.add("drag"); }));
-["dragleave", "drop"].forEach((t) =>
-  dz.addEventListener(t, (e) => { e.preventDefault(); dz.classList.remove("drag"); }));
-dz.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
+/* ------------------------- 提交任务 ------------------------- */
+let currentJob = null;
+let es = null;
+const pkgMetrics = {};
 
-function addFiles(fileList) {
-  for (const f of fileList) if (f.type.startsWith("image/")) selectedFiles.push(f);
-  renderThumbs();
-}
-function renderThumbs() {
-  const box = $("thumbs");
-  box.innerHTML = "";
-  selectedFiles.slice(0, 12).forEach((f) => {
-    const img = document.createElement("img");
-    img.src = URL.createObjectURL(f);
-    img.onload = () => URL.revokeObjectURL(img.src);
-    box.append(img);
-  });
-  if (selectedFiles.length) {
-    const c = document.createElement("span");
-    c.className = "count";
-    c.textContent = `${selectedFiles.length} 张图片`;
-    box.append(c);
-  }
-}
-
-/* ------------------------------ 提交 ----------------------------------- */
-$("submit").addEventListener("click", submitJob);
-async function submitJob() {
-  const err = $("compose-error");
-  err.hidden = true;
-  if (!selectedFiles.length) {
-    err.textContent = "请至少添加一张图片。";
-    err.hidden = false;
-    return;
-  }
-  const btn = $("submit");
-  btn.disabled = true; btn.textContent = "上传中…";
-  try {
-    const fd = new FormData();
-    selectedFiles.forEach((f) => fd.append("images", f, f.name));
-    fd.append("instruction", $("instruction").value.trim());
-    if ($("preset").value) fd.append("preset", $("preset").value);
-    const res = await fetch(`${API}/api/jobs`, { method: "POST", body: fd });
-    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
-    const { job_id } = await res.json();
-    openJob(job_id);
-    selectedFiles = []; renderThumbs();
-  } catch (e) {
-    err.textContent = `无法启动任务：${e.message}`;
-    err.hidden = false;
-  } finally {
-    btn.disabled = false; btn.textContent = "生成场景";
-  }
-}
-
-/* ------------------------------ 任务视图 --------------------------------- */
-$("new-job").addEventListener("click", () => {
-  if (es) es.close();
-  $("job").hidden = true;
-  $("compose").scrollIntoView();
-});
-$("cancel").addEventListener("click", async () => {
-  if (currentJob) await fetch(`${API}/api/jobs/${currentJob}/cancel`, { method: "POST" });
-});
-
-function renderStageList() {
-  const ol = $("stages");
-  ol.innerHTML = "";
+function renderStages() {
+  const ol = $("stages"); ol.innerHTML = "";
   STAGES.forEach(([key, label], i) => {
     const li = document.createElement("li");
     li.className = "stage"; li.id = `st-${key}`;
@@ -140,10 +123,8 @@ function renderStageList() {
     ol.append(li);
   });
 }
-
 function setStage(key, { status, pct, message }) {
-  const li = $(`st-${key}`);
-  if (!li) return;
+  const li = $(`st-${key}`); if (!li) return;
   if (status) li.className = `stage ${status === "done" ? "done"
     : status === "running" ? "running" : status === "failed" ? "failed" : ""}`;
   if (pct != null) {
@@ -152,15 +133,13 @@ function setStage(key, { status, pct, message }) {
   }
   if (message != null) li.querySelector(".msg").textContent = message;
 }
-
-function setStatus(status) {
+function setStatus(s) {
   const b = $("job-status");
-  b.textContent = statusText(status);
+  b.textContent = statusText(s);
   b.className = "badge " + ({ running: "badge-run", planning: "badge-run",
-    done: "badge-ok", failed: "badge-err", cancelled: "badge-err" }[status] || "badge-muted");
-  $("cancel").hidden = !(status === "running" || status === "planning");
+    done: "badge-ok", failed: "badge-err", cancelled: "badge-err" }[s] || "badge-muted");
+  $("cancel").hidden = !(s === "running" || s === "planning");
 }
-
 function showPlan(config, planner) {
   if (!config) return;
   $("plan").hidden = false;
@@ -168,39 +147,67 @@ function showPlan(config, planner) {
   $("plan-detail").textContent =
     `预设=${c.preset} · 后端=${c.train.backend} · 迭代=${c.train.iterations}`
     + (c.convert.max_splats ? ` · 上限=${c.convert.max_splats}` : "")
-    + (planner ? `   (${planner})` : "")
-    + (c.notes ? `\n${c.notes}` : "");
+    + (planner ? `  (${planner})` : "");
 }
-
 function logLine(line) {
   const log = $("log");
   log.textContent += line + "\n";
   log.scrollTop = log.scrollHeight;
 }
 
-const pkgMetrics = {};
+$("submit").addEventListener("click", submitJob);
+$("cancel").addEventListener("click", async () => {
+  if (currentJob) await fetch(`${API}/api/jobs/${currentJob}/cancel`, { method: "POST" });
+});
+
+async function submitJob() {
+  const err = $("compose-error"); err.hidden = true;
+  const path = $("source-folder").value.trim();
+  if (!path) { err.textContent = "请填一个后端可读到的图片文件夹路径。"; err.hidden = false; return; }
+  const btn = $("submit"); btn.disabled = true; btn.textContent = "提交中…";
+  try {
+    const body = {
+      path,
+      instruction: $("instruction").value.trim(),
+      preset: $("preset").value || null,
+    };
+    const res = await fetch(`${API}/api/jobs/from-path`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const detail = (await res.json().catch(() => ({}))).detail || res.statusText;
+      throw new Error(detail);
+    }
+    const { job_id } = await res.json();
+    openJob(job_id);
+  } catch (e) {
+    err.textContent = `无法启动任务：${e.message}`;
+    err.hidden = false;
+  } finally {
+    btn.disabled = false; btn.textContent = "生成场景";
+  }
+}
 
 async function openJob(id) {
   currentJob = id;
   if (es) es.close();
-  $("job").hidden = false;
+  $("job-head").hidden = false;
   $("job-id").textContent = id;
-  $("result").hidden = true;
   $("plan").hidden = true;
   $("log").textContent = "";
-  renderStageList();
+  renderStages();
   setStatus("queued");
-  $("job").scrollIntoView({ behavior: "smooth" });
 
-  // 拉取当前状态（兼容重连 / 已完成的任务）
   try {
     const job = await (await fetch(`${API}/api/jobs/${id}`)).json();
     applyJobState(job);
-  } catch { /* 忽略 */ }
+  } catch { /* ignore */ }
 
   es = new EventSource(`${API}/api/jobs/${id}/events`);
   es.onmessage = (e) => handleEvent(JSON.parse(e.data));
-  es.onerror = () => { /* 浏览器自动重连；最终事件会关闭它 */ };
+  es.onerror = () => {};
 }
 
 function applyJobState(job) {
@@ -208,7 +215,7 @@ function applyJobState(job) {
   if (job.config) showPlan(job.config, null);
   (job.stages || []).forEach((s) =>
     setStage(s.name, { status: s.status, pct: s.progress, message: s.message }));
-  if (job.status === "done") showResult(job);
+  if (job.status === "done") onJobDone(job);
   if (job.status === "failed") logLine(`错误：${job.error || "失败"}`);
 }
 
@@ -227,52 +234,86 @@ function handleEvent(ev) {
     case "stage_failed": setStage(ev.stage, { status: "failed" }); logLine(`[${ev.stage}] 错误：${d.error}`); break;
     case "job_finished":
       setStatus(d.status);
-      if (d.status === "done") fetch(`${API}/api/jobs/${ev.job_id}`).then(r => r.json()).then(showResult);
+      if (d.status === "done")
+        fetch(`${API}/api/jobs/${ev.job_id}`).then(r => r.json()).then(onJobDone);
       if (es) es.close();
-      loadRecent();
       break;
     case "job_failed":
-      setStatus("failed"); logLine(`错误：${d.error}`); if (es) es.close(); loadRecent();
+      setStatus("failed"); logLine(`错误：${d.error}`); if (es) es.close();
       break;
   }
 }
 
-function showResult(job) {
-  $("result").hidden = false;
-  $("download").href = `${API}/api/jobs/${job.id}/result`;
-  const parts = [];
-  if (pkgMetrics.splats) parts.push(`${pkgMetrics.splats.toLocaleString()} 个高斯点`);
-  if (pkgMetrics.bytes) parts.push(`${(pkgMetrics.bytes / 1024).toFixed(0)} KiB`);
-  if (job.config) parts.push(`${job.config.preset}/${job.config.train.backend}`);
-  $("result-stats").textContent = parts.join(" · ");
-}
-
-/* ------------------------------ 最近任务 ----------------------------- */
-async function loadRecent() {
+async function onJobDone(job) {
+  const splats = pkgMetrics.splats ? ` · ${pkgMetrics.splats.toLocaleString()} splats` : "";
+  setViewerStatus("下载结果中…");
   try {
-    const jobs = await (await fetch(`${API}/api/jobs`)).json();
-    const ul = $("recent");
-    ul.innerHTML = "";
-    if (!jobs.length) { ul.innerHTML = '<li class="empty">暂无任务。</li>'; return; }
-    jobs.slice(0, 8).forEach((j) => {
-      const li = document.createElement("li");
-      li.innerHTML =
-        `<span class="rid">${j.id}</span>`
-        + `<span class="badge ${statusClass(j.status)}">${statusText(j.status)}</span>`
-        + `<span class="rins">${escapeHtml(j.instruction || "（无指令）")}</span>`;
-      const btn = document.createElement("button");
-      btn.textContent = "打开";
-      btn.onclick = () => openJob(j.id);
-      li.append(btn);
-      ul.append(li);
-    });
-  } catch { /* 离线 */ }
+    const url = `${API}/api/jobs/${job.id}/result`;
+    await loadScene(url, `Job ${job.id}${splats}`);
+  } catch (e) {
+    logLine("装载结果失败: " + e.message);
+  }
 }
-const statusClass = (s) => ({ done: "badge-ok", running: "badge-run", planning: "badge-run",
-  failed: "badge-err", cancelled: "badge-err" }[s] || "badge-muted");
-const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) =>
-  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-/* ------------------------------ 启动 ------------------------------------- */
+/* ------------------------- 加载样本 ------------------------- */
+$("load-sample").addEventListener("click", async () => {
+  try {
+    const probe = await fetch(`${API}/api/sample`, { method: "HEAD" });
+    if (!probe.ok) {
+      const err = $("compose-error");
+      err.textContent = "后端没有样本场景。把训练好的 3DGS 输出放到 sample-scene/ 或 data/sample-scene/ 目录下。";
+      err.hidden = false; return;
+    }
+    await loadScene(`${API}/api/sample`, "样本场景");
+  } catch (e) {
+    setViewerStatus("加载样本失败: " + e.message);
+  }
+});
+
+/* ------------------------- 聊天 ------------------------- */
+const chatHistory = [];
+
+function appendChat(role, content) {
+  const wrap = document.createElement("div");
+  wrap.className = `msg ${role === "user" ? "user" : "agent"}`;
+  wrap.innerHTML = `<span class="who">${role === "user" ? "你" : "Agent"}</span>
+                    <div class="body"></div>`;
+  wrap.querySelector(".body").textContent = content;
+  $("chat-history").append(wrap);
+  $("chat-history").scrollTop = $("chat-history").scrollHeight;
+}
+
+$("chat-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const txt = $("chat-input").value.trim();
+  if (!txt) return;
+  $("chat-input").value = "";
+  appendChat("user", txt);
+  chatHistory.push({ role: "user", content: txt });
+  const sendBtn = $("chat-send");
+  sendBtn.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: chatHistory }),
+    });
+    const body = await r.json();
+    const reply = body.reply || "(空回复)";
+    appendChat("agent", reply);
+    chatHistory.push({ role: "assistant", content: reply });
+    if (body.backend) {
+      $("chat-backend").textContent = body.backend;
+      $("chat-backend").className = "badge " + (body.backend === "claude" ? "badge-ok" : "badge-muted");
+    }
+  } catch (err) {
+    appendChat("agent", "(请求失败: " + err.message + ")");
+  } finally {
+    sendBtn.disabled = false;
+  }
+});
+
+/* ------------------------- 启动 ------------------------- */
 loadHealth();
-loadRecent();
+renderStages();
+ensureViewer();  // 初始化空视口（出现"左键拖…"提示）

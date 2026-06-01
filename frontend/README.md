@@ -1,26 +1,65 @@
-# 前端 — 任务控制台
+# 前端 — 浏览器一体化工作室
 
-一个无需构建的单页应用（纯 HTML/CSS/JS），用于驱动 3DGS-Agent 后端：拖放上传图片、向 Agent（智能体）输入自然语言指令、实时查看流水线运行进度（Server-Sent Events），然后下载 `.ply` 文件并查看 Unity 后续步骤。
+零构建的单页应用，**三列布局**：
+
+```
+┌──────────┬──────────────────────┬──────────┐
+│ 任务控制   │   3DGS 实时渲染视口    │ Agent 聊天 │
+│ 路径输入   │   (mkkellogg/         │ 多轮对话   │
+│ 预设/指令  │   gaussian-splats-3d │           │
+│ 进度日志   │   WebGL2)            │ /api/chat │
+└──────────┴──────────────────────┴──────────┘
+```
+
+操作型 UI 全在浏览器里（不在 Unity 中），现场演示只需打开浏览器。
+**Unity 那套 (`tools/unity_3dgs_importer/Agent3DGSStudioUI.cs`) 保留为可选**:
+真的有 Unity demo 需求时用,但默认路径是这个 Web 工作室。
 
 ## 运行
 
-两种方式：
-
-**A. 由后端托管（最简单）。** FastAPI 应用将本目录挂载至 `/`，只需启动后端并访问：
 ```bash
-cd ../backend && uvicorn app.main:app --reload   # http://localhost:8000
+cd backend
+source .venv/bin/activate
+uvicorn app.main:app --port 8001   # 同时把这个目录托管在 /
 ```
 
-**B. 独立静态服务器**（独立源；后端 CORS 已允许）：
-```bash
-python -m http.server 5173      # open http://localhost:5173
-```
-`app.js` 会自动检测 API 基础地址：由后端托管时使用同源（方式 A），否则使用 `http://localhost:8000`（方式 B）。
+浏览器打开 `http://localhost:8001` 即可。**首次加载需要联网**(从 jsDelivr 拉
+gsplat 库 + Three.js,约 1–2 MB;浏览器之后会缓存)。
 
-## 文件说明
+## 一键样本(无需训练)
 
-- `index.html` — 页面布局：上传、指令输入、预设、任务视图、近期任务。
-- `styles.css` — 深色技术主题，不依赖外部字体或 CDN（可离线使用）。
-- `app.js` — 上传 → `POST /api/jobs`，通过 `EventSource` 监听 `/api/jobs/{id}/events` 实时更新，含阶段进度、日志流、结果下载。
+后端在 `sample-scene/` 或 `data/sample-scene/` 找到训练好的 3DGS 输出
+(`point_cloud/iteration_*/point_cloud.ply`)时,前端 **加载样本** 按钮就能用——
+后端通过 `GET /api/sample` 把 .ply 直接送进浏览器渲染。**没有就报 404 + 文案**。
 
-无需 `package.json`，无需打包工具——直接打开即可使用。（如日后需要构建步骤，`node_modules/` 和 `dist/` 已在仓库 `.gitignore` 中覆盖。）
+如何放样本:
+- 把训练完的整个目录(含 `cameras.json` / `cfg_args` / `point_cloud/`)解压到
+  `sample-scene/`(仓库根目录)或 `data/sample-scene/`(已被 `.gitignore` 排除,不入仓)。
+- 后端不需要重启,刷新浏览器即可。
+
+## 文件
+
+- `index.html` — 三列布局 + import map 加载 gsplat
+- `styles.css` — 暗色 grid 布局
+- `app.js` — ESM 模块:`/api/jobs/from-path` 提任务、SSE 看进度、完成自动喂给
+  viewer 渲染、`/api/chat` 多轮聊天
+
+## 与后端对接
+
+| 端点 | 用途 |
+|---|---|
+| `POST /api/jobs/from-path` | 不上传图,直接给后端可读到的文件夹路径 |
+| `GET /api/jobs/{id}/events` | SSE 进度 + 日志 |
+| `GET /api/jobs/{id}/result` | 任务完成后下载 `.ply`(同时也喂给 viewer) |
+| `GET /api/sample` | 加载预训练样本 |
+| `POST /api/chat` | 自由对话(`{ messages: [{role, content}, ...] }`) |
+
+## 离线 / 内网部署
+
+CDN 版本不可用时,可以把以下两个文件放到 `frontend/vendor/`,在 `index.html`
+的 import map 里改成本地路径:
+
+- `three@0.157.0/build/three.module.js`
+- `@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js`
+
+不需要构建步骤,改路径即可。
