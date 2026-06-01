@@ -15,6 +15,7 @@
     }
   }
   </script>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js" />
 </head>
 <body>
   <header class="topbar">
@@ -84,8 +85,9 @@
     <section class="viewer" id="viewer-wrap">
       <div id="viewer-container" aria-label="3D Gaussian Splatting viewport"></div>
       <div class="viewer-overlay" id="viewer-hint">
-        <p>左键拖：环绕 · 右键拖：平移 · 滚轮：缩放</p>
-        <p class="hint">点击「加载样本」立即看预训练场景；或跑完一次新任务自动加载结果。</p>
+        <p>左键拖：环绕 · 右键拖：平移 · 滚轮：缩放 · W/A/S/D：飞行</p>
+        <p class="hint">点「加载样本」立即看预训练场景；或跑完一次新任务自动加载结果。</p>
+        <p class="hint">看不到？滚轮拉远 / 按 S 后退 / 拖鼠标转一下视角。</p>
       </div>
       <div class="viewer-status" id="viewer-status" hidden></div>
     </section>

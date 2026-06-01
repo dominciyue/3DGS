@@ -4,6 +4,7 @@
  *   右列：Agent 多轮聊天
  */
 import * as GaussianSplats3D from "@mkkellogg/gaussian-splats-3d";
+import * as THREE from "three";
 
 const API = (location.port === "5173" || location.protocol === "file:")
   ? "http://localhost:8000" : "";
@@ -33,6 +34,10 @@ function ensureViewer() {
   if (viewer) return viewer;
   viewer = new GaussianSplats3D.Viewer({
     rootElement: $("viewer-container"),
+    // Inria 训练出的场景:Y 轴朝下 + 略带 Z 倾斜,这是 mkkellogg 示例用过的值
+    cameraUp: [0, -1, -0.17],
+    initialCameraPosition: [0, -1, -5],
+    initialCameraLookAt: [0, 0, 0],
     sphericalHarmonicsDegree: 2,
     gpuAcceleratedSort: true,
     sharedMemoryForWorkers: false,   // 避开 COOP/COEP 要求
@@ -41,6 +46,40 @@ function ensureViewer() {
     dynamicScene: false,
   });
   return viewer;
+}
+
+/** 装好场景后:计算包围盒,把相机摆到能看见它的距离。Inria 场景的中心和尺度
+ *  事先未知,不 frame 一下相机就常常在云里面 / 离得太远 → 全黑。 */
+function frameSceneToCamera() {
+  try {
+    const mesh = viewer.splatMesh;
+    if (!mesh) return;
+    const geom = mesh.geometry;
+    if (!geom) return;
+    geom.computeBoundingBox?.();
+    const box = geom.boundingBox;
+    if (!box || !isFinite(box.min.x) || !isFinite(box.max.x)) return;
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const radius = Math.max(size.length() * 0.5, 1);
+    const dist = radius * 2.5;
+    // 视线从场景中心后退 dist 看回来 (考虑 cameraUp 是 -Y 系)
+    const cam = viewer.camera;
+    cam.position.set(center.x, center.y - dist * 0.3, center.z - dist);
+    cam.lookAt(center);
+    cam.near = Math.max(radius * 0.005, 0.01);
+    cam.far = Math.max(radius * 50, 1000);
+    cam.updateProjectionMatrix();
+    if (viewer.controls?.target) {
+      viewer.controls.target.copy(center);
+      viewer.controls.update?.();
+    }
+    console.log("[viewer] framed:", { center: center.toArray(), size: size.toArray(), dist });
+  } catch (e) {
+    console.warn("frameSceneToCamera failed:", e);
+  }
 }
 
 function setViewerStatus(text) {
@@ -72,9 +111,12 @@ async function loadScene(url, label) {
       format: PLY_FORMAT,         // ← 关键: 显式告诉库这是 .ply
       showLoadingUI: true,
       splatAlphaRemovalThreshold: 5,
-      progressiveLoad: true,
+      // progressiveLoad 在某些场景下相机会摆不对,先关掉
+      progressiveLoad: false,
     });
     if (!viewerStarted) { viewer.start(); viewerStarted = true; }
+    // 装好后把相机框到点云中心;否则相机常在云里面 / 离得太远 → 全黑
+    setTimeout(frameSceneToCamera, 50);
     setViewerStatus(label || "");
     setTimeout(() => setViewerStatus(""), 2500);
   } catch (e) {
