@@ -33,19 +33,10 @@ let viewerStarted = false;
 let debugBox = null;            // 调试用的 wireframe 盒,看到就说明相机方向是对的
 function ensureViewer() {
   if (viewer) return viewer;
+  // 极简配置: 只保留 rootElement, 其余全交给库默认 (排除自定义参数干扰)
   viewer = new GaussianSplats3D.Viewer({
     rootElement: $("viewer-container"),
-    // 用 Three.js 默认 Y-up (不强行覆盖 cameraUp), 避免 splat 被翻反
-    initialCameraPosition: [0, 2, 6],
-    initialCameraLookAt: [0, 0, 0],
-    // 关键: 必须跟 .ply 实际 SH 阶数一致 (Inria 默认 sh_degree=3) —— 库按这个
-    // 决定每个 splat 读多少字节;设错就 opacity/scale/quat 全部错位 → 看不到
-    sphericalHarmonicsDegree: 3,
-    gpuAcceleratedSort: true,
-    sharedMemoryForWorkers: false,
-    selfDrivenMode: true,
-    useBuiltInControls: true,
-    dynamicScene: false,
+    sharedMemoryForWorkers: false,   // 唯一保留: 避开 COOP/COEP 要求
   });
   return viewer;
 }
@@ -183,8 +174,7 @@ async function loadScene(url, label) {
     await viewer.addSplatScene(url, {
       format: PLY_FORMAT,         // ← 显式声明 PLY (避免 URL 无后缀的格式判断错误)
       showLoadingUI: true,
-      splatAlphaRemovalThreshold: 1,   // 放宽,别过度剔除
-      progressiveLoad: false,
+      // 其他选项全部用库默认 —— 排除我们的参数干扰
     });
     if (!viewerStarted) { viewer.start(); viewerStarted = true; }
     // 装好后把相机框到点云中心;有时 splat 数据稍后才就绪,延时重试 3 次
