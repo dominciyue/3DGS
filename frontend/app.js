@@ -30,22 +30,39 @@ const PLY_FORMAT = GaussianSplats3D.SceneFormat?.Ply ?? 0;
 
 let viewer = null;
 let viewerStarted = false;
+let debugBox = null;            // 调试用的 wireframe 盒,看到就说明相机方向是对的
 function ensureViewer() {
   if (viewer) return viewer;
   viewer = new GaussianSplats3D.Viewer({
     rootElement: $("viewer-container"),
-    // Inria 训练出的场景:Y 轴朝下 + 略带 Z 倾斜,这是 mkkellogg 示例用过的值
-    cameraUp: [0, -1, -0.17],
-    initialCameraPosition: [0, -1, -5],
+    // 用 Three.js 默认 Y-up (不强行覆盖 cameraUp), 避免 splat 被翻反
+    initialCameraPosition: [0, 2, 6],
     initialCameraLookAt: [0, 0, 0],
-    sphericalHarmonicsDegree: 2,
+    // 关键: 跟着 .ply 的实际 SH 阶数 (Inria 默认 sh_degree=3); 设错会渲染异常
+    sphericalHarmonicsDegree: 0,    // 先用 0 = 只看 DC 基色,排除 SH 解析问题
     gpuAcceleratedSort: true,
-    sharedMemoryForWorkers: false,   // 避开 COOP/COEP 要求
+    sharedMemoryForWorkers: false,
     selfDrivenMode: true,
     useBuiltInControls: true,
     dynamicScene: false,
   });
   return viewer;
+}
+
+/** 给调试用:在 splat bbox 上画一个亮色 wireframe 盒.
+ *  能看到这个盒子但看不到 splat → splat 渲染本身的问题(SH/alpha/坐标系)
+ *  连盒子都看不到 → 相机方向或位置错了,跟 splat 无关 */
+function addDebugBox(box) {
+  if (!viewer?.threeScene) return;
+  if (debugBox) { viewer.threeScene.remove(debugBox); debugBox.geometry?.dispose(); debugBox.material?.dispose(); debugBox = null; }
+  const size = new THREE.Vector3(); box.getSize(size);
+  const center = new THREE.Vector3(); box.getCenter(center);
+  const geom = new THREE.BoxGeometry(size.x, size.y, size.z);
+  const mat = new THREE.LineBasicMaterial({ color: 0xff8a5c });
+  const edges = new THREE.EdgesGeometry(geom);
+  debugBox = new THREE.LineSegments(edges, mat);
+  debugBox.position.copy(center);
+  viewer.threeScene.add(debugBox);
 }
 
 /** 装好场景后:遍历真实 splat 中心算包围盒,把相机摆到能看见的距离。
@@ -77,11 +94,11 @@ function frameSceneToCamera() {
     const center = new THREE.Vector3(); box.getCenter(center);
     const size = new THREE.Vector3();   box.getSize(size);
     const radius = Math.max(size.length() * 0.5, 0.5);
-    const dist = radius * 2.5;
+    const dist = radius * 3;
 
     const cam = viewer.camera;
-    // 沿 -Z 退一段,稍微偏一点 Y 让画面立体些
-    cam.position.set(center.x, center.y - dist * 0.3, center.z - dist);
+    // 用 +Y 标准视角:相机偏上方往下看,绕过坐标系朝向猜测
+    cam.position.set(center.x + dist * 0.4, center.y + dist * 0.4, center.z + dist);
     cam.lookAt(center);
     cam.near = Math.max(radius * 0.005, 0.01);
     cam.far  = Math.max(radius * 100, 1000);
@@ -90,6 +107,7 @@ function frameSceneToCamera() {
       viewer.controls.target.copy(center);
       viewer.controls.update?.();
     }
+    addDebugBox(box);
     console.log("[viewer] framed:",
       { count, sampled: n, center: center.toArray(), size: size.toArray(),
         radius, dist, camPos: cam.position.toArray() });
