@@ -135,30 +135,47 @@ async def cancel_job(job_id: str):
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-def _find_sample_ply() -> Path | None:
+def _find_sample_ply() -> tuple[Path | None, list[str]]:
+    """Recursively search for a Gaussian .ply under sample-scene/ or data/sample-scene/.
+    Returns (path_or_None, diagnostic_lines)."""
+    diag: list[str] = []
     bases = [REPO_ROOT / "sample-scene", REPO_ROOT / "data" / "sample-scene"]
     for base in bases:
         if not base.is_dir():
+            diag.append(f"NOT FOUND: {base}")
             continue
-        cands = sorted(base.glob("point_cloud/iteration_*/point_cloud.ply"),
-                       key=lambda p: int(p.parent.name.split("_")[-1]) if "_" in p.parent.name else -1)
+        diag.append(f"searching: {base}")
+        # 1) 标准布局:**/point_cloud/iteration_<N>/point_cloud.ply (取最高迭代)
+        cands = sorted(
+            base.glob("**/point_cloud/iteration_*/point_cloud.ply"),
+            key=lambda p: int(p.parent.name.split("_")[-1]) if "_" in p.parent.name else -1,
+        )
         if cands:
-            return cands[-1]
-        direct = base / "point_cloud.ply"
-        if direct.is_file():
-            return direct
-    return None
+            diag.append(f"FOUND (highest iter): {cands[-1]}")
+            return cands[-1], diag
+        # 2) 退而求其次:任何 point_cloud.ply
+        fallback = list(base.rglob("point_cloud.ply"))
+        if fallback:
+            diag.append(f"FOUND (fallback): {fallback[0]}")
+            return fallback[0], diag
+        # 列出实际有哪些 ply 供排查
+        plys = list(base.rglob("*.ply"))
+        if plys:
+            diag.append(f"no point_cloud.ply, only: {[p.name for p in plys[:5]]}")
+        else:
+            diag.append(f"no .ply under {base}")
+    return None, diag
 
 
 @app.get("/api/sample")
 async def sample_scene():
-    """Serve a pre-trained sample .ply if one is available under sample-scene/ or data/sample-scene/."""
-    p = _find_sample_ply()
+    """Serve a pre-trained sample .ply if available; otherwise 404 with diagnostic."""
+    p, diag = _find_sample_ply()
     if p is None:
         raise HTTPException(
             404,
-            "no sample scene available — extract a trained 3DGS output to "
-            "sample-scene/ (or data/sample-scene/) at the repo root",
+            "no sample scene found. checked: " + "  ||  ".join(diag) +
+            ". Expected layout: <repo>/sample-scene/point_cloud/iteration_<N>/point_cloud.ply",
         )
     return FileResponse(p, media_type="application/octet-stream", filename="sample.ply")
 
