@@ -33,10 +33,13 @@ let viewerStarted = false;
 let debugBox = null;            // 调试用的 wireframe 盒,看到就说明相机方向是对的
 function ensureViewer() {
   if (viewer) return viewer;
-  // 极简配置: 只保留 rootElement, 其余全交给库默认 (排除自定义参数干扰)
   viewer = new GaussianSplats3D.Viewer({
     rootElement: $("viewer-container"),
-    sharedMemoryForWorkers: false,   // 唯一保留: 避开 COOP/COEP 要求
+    sharedMemoryForWorkers: false,   // 避开 COOP/COEP 要求
+    // 关键: 开 anti-alias (Mip-Splatting 风格滤波), 不开就会有长条尖刺
+    antialiased: true,
+    // 跟文件实际 SH 阶数对齐 (Inria 默认 sh_degree=3, 共 45 个 f_rest_*)
+    sphericalHarmonicsDegree: 3,
   });
   return viewer;
 }
@@ -172,9 +175,9 @@ async function loadScene(url, label) {
 
   try {
     await viewer.addSplatScene(url, {
-      format: PLY_FORMAT,         // ← 显式声明 PLY (避免 URL 无后缀的格式判断错误)
+      format: PLY_FORMAT,                 // 显式声明 PLY (URL 无后缀)
       showLoadingUI: true,
-      // 其他选项全部用库默认 —— 排除我们的参数干扰
+      splatAlphaRemovalThreshold: 5,      // 剔除低不透明度的"噪声 splat" (aras-p Unity 默认行为)
     });
     if (!viewerStarted) { viewer.start(); viewerStarted = true; }
     // 装好后把相机框到点云中心;有时 splat 数据稍后才就绪,延时重试 3 次
