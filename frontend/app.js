@@ -48,35 +48,51 @@ function ensureViewer() {
   return viewer;
 }
 
-/** 装好场景后:计算包围盒,把相机摆到能看见它的距离。Inria 场景的中心和尺度
- *  事先未知,不 frame 一下相机就常常在云里面 / 离得太远 → 全黑。 */
+/** 装好场景后:遍历真实 splat 中心算包围盒,把相机摆到能看见的距离。
+ *  注意:不能用 splatMesh.geometry.boundingBox —— 那是渲染用的四边形 quad
+ *  (2x2x0),不是点云真正的包围盒。点云中心在 splat buffer 里,要
+ *  splatMesh.getSplatCenter(i, vec) 才能取到。 */
 function frameSceneToCamera() {
   try {
     const mesh = viewer.splatMesh;
-    if (!mesh) return;
-    const geom = mesh.geometry;
-    if (!geom) return;
-    geom.computeBoundingBox?.();
-    const box = geom.boundingBox;
-    if (!box || !isFinite(box.min.x) || !isFinite(box.max.x)) return;
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const radius = Math.max(size.length() * 0.5, 1);
+    if (!mesh || typeof mesh.getSplatCount !== "function") {
+      console.warn("[viewer] splatMesh API not ready");
+      return;
+    }
+    const count = mesh.getSplatCount();
+    if (!count) { console.warn("[viewer] splat count is 0"); return; }
+
+    const tmp = new THREE.Vector3();
+    const box = new THREE.Box3();
+    const stride = Math.max(1, Math.floor(count / 20000));  // 最多采样 20k 个,几 ms 出结果
+    let n = 0;
+    for (let i = 0; i < count; i += stride) {
+      mesh.getSplatCenter(i, tmp);
+      if (isFinite(tmp.x) && isFinite(tmp.y) && isFinite(tmp.z)) {
+        box.expandByPoint(tmp); n++;
+      }
+    }
+    if (!n || box.isEmpty()) { console.warn("[viewer] bbox empty"); return; }
+
+    const center = new THREE.Vector3(); box.getCenter(center);
+    const size = new THREE.Vector3();   box.getSize(size);
+    const radius = Math.max(size.length() * 0.5, 0.5);
     const dist = radius * 2.5;
-    // 视线从场景中心后退 dist 看回来 (考虑 cameraUp 是 -Y 系)
+
     const cam = viewer.camera;
+    // 沿 -Z 退一段,稍微偏一点 Y 让画面立体些
     cam.position.set(center.x, center.y - dist * 0.3, center.z - dist);
     cam.lookAt(center);
     cam.near = Math.max(radius * 0.005, 0.01);
-    cam.far = Math.max(radius * 50, 1000);
+    cam.far  = Math.max(radius * 100, 1000);
     cam.updateProjectionMatrix();
     if (viewer.controls?.target) {
       viewer.controls.target.copy(center);
       viewer.controls.update?.();
     }
-    console.log("[viewer] framed:", { center: center.toArray(), size: size.toArray(), dist });
+    console.log("[viewer] framed:",
+      { count, sampled: n, center: center.toArray(), size: size.toArray(),
+        radius, dist, camPos: cam.position.toArray() });
   } catch (e) {
     console.warn("frameSceneToCamera failed:", e);
   }
@@ -115,8 +131,14 @@ async function loadScene(url, label) {
       progressiveLoad: false,
     });
     if (!viewerStarted) { viewer.start(); viewerStarted = true; }
-    // 装好后把相机框到点云中心;否则相机常在云里面 / 离得太远 → 全黑
-    setTimeout(frameSceneToCamera, 50);
+    // 装好后把相机框到点云中心;有时 splat 数据稍后才就绪,延时重试 3 次
+    let tries = 0;
+    const tryFrame = () => {
+      frameSceneToCamera();
+      const ok = viewer.splatMesh?.getSplatCount?.() > 0;
+      if (!ok && tries++ < 3) setTimeout(tryFrame, 300);
+    };
+    setTimeout(tryFrame, 100);
     setViewerStatus(label || "");
     setTimeout(() => setViewerStatus(""), 2500);
   } catch (e) {
