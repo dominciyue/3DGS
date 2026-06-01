@@ -257,17 +257,9 @@ async function onJobDone(job) {
 
 /* ------------------------- 加载样本 ------------------------- */
 $("load-sample").addEventListener("click", async () => {
-  try {
-    const probe = await fetch(`${API}/api/sample`, { method: "HEAD" });
-    if (!probe.ok) {
-      const err = $("compose-error");
-      err.textContent = "后端没有样本场景。把训练好的 3DGS 输出放到 sample-scene/ 或 data/sample-scene/ 目录下。";
-      err.hidden = false; return;
-    }
-    await loadScene(`${API}/api/sample`, "样本场景");
-  } catch (e) {
-    setViewerStatus("加载样本失败: " + e.message);
-  }
+  // 不再用 HEAD 预探测 (FastAPI/FileResponse 对 HEAD 处理有坑) —— 直接试 GET,
+  // 失败由 loadScene 的 catch 在 viewer-status 上报错。
+  await loadScene(`${API}/api/sample`, "样本场景");
 });
 
 /* ------------------------- 聊天 ------------------------- */

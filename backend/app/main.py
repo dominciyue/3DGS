@@ -167,9 +167,14 @@ def _find_sample_ply() -> tuple[Path | None, list[str]]:
     return None, diag
 
 
-@app.get("/api/sample")
+@app.api_route("/api/sample", methods=["GET", "HEAD"])
 async def sample_scene():
-    """Serve a pre-trained sample .ply if available; otherwise 404 with diagnostic."""
+    """Serve a pre-trained sample .ply if available; otherwise 404 with diagnostic.
+
+    Explicitly handles HEAD too — Starlette's auto-HEAD-from-GET doesn't work
+    correctly with FileResponse (returns 404 for HEAD even when GET returns 200),
+    so we declare both methods on the route.
+    """
     p, diag = _find_sample_ply()
     if p is None:
         raise HTTPException(
