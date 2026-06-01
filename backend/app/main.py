@@ -180,6 +180,18 @@ async def sample_scene():
     return FileResponse(p, media_type="application/octet-stream", filename="sample.ply")
 
 
+@app.get("/api/sample/debug")
+async def sample_debug():
+    """Return what the server actually sees, for troubleshooting 404s."""
+    p, diag = _find_sample_ply()
+    return {
+        "repo_root": str(REPO_ROOT),
+        "checked_bases": [str(REPO_ROOT / "sample-scene"), str(REPO_ROOT / "data" / "sample-scene")],
+        "result": str(p) if p else None,
+        "diagnostic": diag,
+    }
+
+
 # --------------------------------------------------------------------------- #
 # /api/jobs/from-path  — Unity client triggers a job by handing us a server-side
 # folder of images, instead of uploading them via multipart.
