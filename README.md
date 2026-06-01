@@ -5,6 +5,8 @@
 > VRAR Game Design & Development · Group 13 (第 13 组)
 > Xu Ke 许可 · Zheng Yuxuan 郑宇轩 · Zhu Yue 朱越
 
+> 🧭 **团队成员第一次上手 / 联调对齐请直接看 [`docs/09-integration-guide.md`](docs/09-integration-guide.md)**:从空机器到现场演示的全流程,含各人交付物位置、REST API 表、踩过的坑、答辩脚本。
+
 ---
 
 ## 1. 项目简介
