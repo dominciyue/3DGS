@@ -174,11 +174,15 @@ async function loadScene(url, label) {
   }
 
   try {
+    // === 渲染参数 v3 (2026-06-01) === 用 F12 Network 找 app.js 搜这行确认版本
     await viewer.addSplatScene(url, {
-      format: PLY_FORMAT,                 // 显式声明 PLY (URL 无后缀)
+      format: PLY_FORMAT,
       showLoadingUI: true,
-      splatAlphaRemovalThreshold: 5,      // 剔除低不透明度的"噪声 splat" (aras-p Unity 默认行为)
+      splatAlphaRemovalThreshold: 30,     // 加大阈值: 5 不够,30≈12% 剔除噪声雾
     });
+    // 让用户在 F12 控制台手动微调
+    window.__dbg = window.__dbg || {};
+    window.__dbg.viewerConfig = { antialiased: true, shDegree: 3, alphaThresh: 30 };
     if (!viewerStarted) { viewer.start(); viewerStarted = true; }
     // 装好后把相机框到点云中心;有时 splat 数据稍后才就绪,延时重试 3 次
     let tries = 0;
