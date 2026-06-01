@@ -23,6 +23,10 @@ const statusText = (s) => STATUS_LABEL[s] || s;
 const $ = (id) => document.getElementById(id);
 
 /* ------------------------- gsplat 视口 ------------------------- */
+// URL 不带扩展名时（我们的 /api/sample、/api/jobs/{id}/result 都没有），
+// 必须显式告诉库这是 PLY，否则会报 "File format not supported"。
+const PLY_FORMAT = GaussianSplats3D.SceneFormat?.Ply ?? 0;
+
 let viewer = null;
 let viewerStarted = false;
 function ensureViewer() {
@@ -65,6 +69,7 @@ async function loadScene(url, label) {
 
   try {
     await viewer.addSplatScene(url, {
+      format: PLY_FORMAT,         // ← 关键: 显式告诉库这是 .ply
       showLoadingUI: true,
       splatAlphaRemovalThreshold: 5,
       progressiveLoad: true,
