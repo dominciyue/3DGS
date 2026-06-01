@@ -4,9 +4,16 @@
 
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
+#if UNITY_EDITOR
+using System.Reflection;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine.SceneManagement;
+#endif
 
 namespace Agent3DGS
 {
@@ -37,6 +44,10 @@ namespace Agent3DGS
         private string _chatInput = "";
         private string _chatBackend = "";
         private readonly List<ChatMsg> _chat = new List<ChatMsg>();
+
+        // ② 训练完拉进当前场景按钮用
+        private bool _loading;
+        private string _resultPath = "";
 
         // -- 与后端 JSON 对应的可序列化类型（供 JsonUtility 使用） ----------------
         [System.Serializable] private class FromPathReq { public string path; public string instruction; public string preset; }
@@ -95,6 +106,16 @@ namespace Agent3DGS
             GUILayout.Label("状态: " + _statusText);
             if (!string.IsNullOrEmpty(_currentJobId))
                 GUILayout.Label("Job: " + _currentJobId);
+
+#if UNITY_EDITOR
+            GUI.enabled = !_loading && !string.IsNullOrEmpty(_resultPath);
+            if (GUILayout.Button(_loading ? "导入中…" : "↩ 把 .ply 加入当前场景"))
+                StartCoroutine(LoadResultIntoScene());
+            GUI.enabled = true;
+#else
+            if (!string.IsNullOrEmpty(_resultPath))
+                GUILayout.Label("结果(仅 Editor 可一键导入):\n" + _resultPath);
+#endif
 
             GUILayout.Label("日志:");
             _logScroll = GUILayout.BeginScrollView(_logScroll, GUI.skin.box, GUILayout.ExpandHeight(true));
@@ -213,7 +234,8 @@ namespace Agent3DGS
 
                     if (st.status == "done")
                     {
-                        _logLines.Add("✓ 完成。result: " + (st.result_path ?? ""));
+                        _resultPath = st.result_path ?? "";
+                        _logLines.Add("✓ 完成。result: " + _resultPath);
                         break;
                     }
                     if (st.status == "failed" || st.status == "cancelled")
@@ -260,5 +282,173 @@ namespace Agent3DGS
                 }
             }
         }
+
+#if UNITY_EDITOR
+        // ===================================================================
+        // ② "训练完直接拉 .ply 进当前场景" —— 仅 Editor 生效。
+        // 不修改队友的 agent_tool.py / Agent3DGSAutoImporter:这里只在我自己
+        // 的脚本里用反射调用 aras-p 公开的
+        //   GaussianSplatting.Editor.GaussianSplatAssetCreator
+        // 把 .ply 转成 GaussianSplatAsset,再加一个 GameObject + GaussianSplatRenderer
+        // 进**当前活动场景**(不新建场景、不替换场景、不动队友的 SceneBuilder)。
+        // 标准 player 构建里这整块被剥离;面板里改为只显示结果路径。
+        // ===================================================================
+
+        private IEnumerator LoadResultIntoScene()
+        {
+            if (string.IsNullOrEmpty(_resultPath) && string.IsNullOrEmpty(_currentJobId))
+            {
+                _logLines.Add("× 没有可用结果。");
+                yield break;
+            }
+            _loading = true;
+
+            // 1) 确保 .ply 在 Unity 工程的 Assets/ 下(asset creator 要求 input/output
+            //    都在工程内)。后端本机的就直接 copy;否则走 /api/jobs/{id}/result 下载。
+            string jobLabel = string.IsNullOrEmpty(_currentJobId) ? "result" : _currentJobId;
+            string assetsRel = "Assets/Generated3DGS/jobs/" + jobLabel;
+            string assetsAbs = Path.GetFullPath(Path.Combine(Application.dataPath, "..", assetsRel))
+                                   .Replace("\\", "/");
+            Directory.CreateDirectory(assetsAbs);
+            string destPly = (assetsAbs + "/point_cloud.ply");
+
+            bool gotLocal = !string.IsNullOrEmpty(_resultPath) && File.Exists(_resultPath);
+            if (gotLocal)
+            {
+                try
+                {
+                    if (Path.GetFullPath(_resultPath) != Path.GetFullPath(destPly))
+                        File.Copy(_resultPath, destPly, true);
+                    _logLines.Add("已复制 .ply 到工程: " + assetsRel + "/point_cloud.ply");
+                }
+                catch (System.Exception exc)
+                {
+                    _logLines.Add("× 复制失败: " + exc.Message);
+                    _loading = false; yield break;
+                }
+            }
+            else
+            {
+                _logLines.Add("本机找不到结果,正在从后端下载…");
+                using (UnityWebRequest r = UnityWebRequest.Get(backendBaseUrl + "/api/jobs/" + _currentJobId + "/result"))
+                {
+                    yield return r.SendWebRequest();
+                    if (r.result != UnityWebRequest.Result.Success)
+                    {
+                        _logLines.Add("× 下载失败: " + r.error);
+                        _loading = false; yield break;
+                    }
+                    try { File.WriteAllBytes(destPly, r.downloadHandler.data); }
+                    catch (System.Exception exc)
+                    {
+                        _logLines.Add("× 写入失败: " + exc.Message);
+                        _loading = false; yield break;
+                    }
+                    _logLines.Add("已下载 " + (r.downloadHandler.data.Length / 1024) + " KiB → " + assetsRel);
+                }
+            }
+
+            // 2) 让 Unity 看到新文件,然后用反射跑 aras-p 的 GaussianSplatAssetCreator
+            //    (就是菜单 Tools > Gaussian Splats > Create GaussianSplatAsset 干的事)。
+            AssetDatabase.Refresh();
+            UnityEngine.Object asset = null;
+            try { asset = CreateGaussianSplatAssetEditor(destPly, assetsRel); }
+            catch (System.Exception exc) { _logLines.Add("× 转换失败: " + exc.Message); }
+            if (asset == null)
+            {
+                _logLines.Add("× 未生成 GaussianSplatAsset(请等 Package Manager 装完 aras-p 再试)。");
+                _loading = false; yield break;
+            }
+
+            // 3) 把 GameObject + GaussianSplatRenderer 加到**当前活动场景**(不新建场景)。
+            System.Type rendererType = FindTypeAcrossAssemblies("GaussianSplatting.Runtime.GaussianSplatRenderer");
+            if (rendererType == null)
+            {
+                _logLines.Add("× 未找到 GaussianSplatRenderer 类型。");
+                _loading = false; yield break;
+            }
+            GameObject splat = new GameObject("Splat_" + jobLabel);
+            Component renderer = splat.AddComponent(rendererType);
+            AssignAssetField(renderer, asset);
+            // 朝向与队友 SceneBuilder 一致,导入即可显示
+            splat.transform.rotation = Quaternion.Euler(-160f, 0f, 180f);
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            Selection.activeGameObject = splat;
+            _logLines.Add("✓ 已加入当前场景: " + splat.name);
+            _loading = false;
+        }
+
+        // 反射 helpers (Editor only)
+
+        private static UnityEngine.Object CreateGaussianSplatAssetEditor(string plyAbsolutePath, string outputAssetFolder)
+        {
+            System.Type creatorType = FindTypeAcrossAssemblies("GaussianSplatting.Editor.GaussianSplatAssetCreator");
+            if (creatorType == null) return null;
+            UnityEngine.Object creator = ScriptableObject.CreateInstance(creatorType);
+
+            SetPrivateField(creatorType, creator, "m_InputFile", plyAbsolutePath);
+            SetPrivateField(creatorType, creator, "m_OutputFolder", outputAssetFolder);
+            SetPrivateField(creatorType, creator, "m_ImportCameras", false);
+
+            System.Type qualityType = creatorType.GetNestedType("DataQuality", BindingFlags.NonPublic);
+            if (qualityType != null)
+            {
+                object q = System.Enum.Parse(qualityType, "Medium");
+                SetPrivateField(creatorType, creator, "m_Quality", q);
+            }
+            MethodInfo apply = creatorType.GetMethod("ApplyQualityLevel", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (apply != null) apply.Invoke(creator, null);
+
+            MethodInfo createAsset = creatorType.GetMethod("CreateAsset", BindingFlags.Instance | BindingFlags.NonPublic);
+            if (createAsset == null) return null;
+            createAsset.Invoke(creator, null);
+
+            string[] guids = AssetDatabase.FindAssets("t:ScriptableObject", new[] { outputAssetFolder });
+            foreach (string g in guids)
+            {
+                string p = AssetDatabase.GUIDToAssetPath(g);
+                UnityEngine.Object o = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(p);
+                if (o != null && o.GetType().FullName == "GaussianSplatting.Runtime.GaussianSplatAsset")
+                    return o;
+            }
+            return null;
+        }
+
+        private static System.Type FindTypeAcrossAssemblies(string fullName)
+        {
+            foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                System.Type t = asm.GetType(fullName);
+                if (t != null) return t;
+            }
+            return null;
+        }
+
+        private static void SetPrivateField(System.Type type, object target, string name, object value)
+        {
+            FieldInfo f = type.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
+            if (f == null) throw new System.MissingFieldException(type.FullName, name);
+            f.SetValue(target, value);
+        }
+
+        private static void AssignAssetField(Component renderer, UnityEngine.Object asset)
+        {
+            SerializedObject so = new SerializedObject(renderer);
+            SerializedProperty it = so.GetIterator();
+            bool enterChildren = true;
+            while (it.NextVisible(enterChildren))
+            {
+                enterChildren = false;
+                if (it.propertyType == SerializedPropertyType.ObjectReference &&
+                    it.displayName.ToLowerInvariant().Contains("asset"))
+                {
+                    it.objectReferenceValue = asset;
+                    so.ApplyModifiedProperties();
+                    return;
+                }
+            }
+            Debug.LogWarning("Agent3DGSStudioUI: 未能找到 asset 字段,请手动把生成的 GaussianSplatAsset 拖到 Renderer 上。");
+        }
+#endif
     }
 }

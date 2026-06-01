@@ -59,17 +59,33 @@ uvicorn app.main:app --port 8001
   点 **发送** → 调 `/api/chat`。
 - 标题栏会显示当前后端：`claude` 或 `mock`。
 
-## 五、把结果拉回 Unity
+## 五、把结果拉回 Unity（一键 ↩）
 
-完成后，后端会在 `data/jobs/<id>/result/model.ply` 生成一个 .ply。两条路：
+任务跑到 `done` 之后，左面板会出现一个按钮：
 
-- **快捷**：在面板的"图片文件夹"换成那个 jobs/<id> 目录，用 `Agent3DGS > Auto Import Configured PLY`
-  菜单（来自 `Agent3DGSAutoImporter`）把它转成 `GaussianSplatAsset` 加入当前场景。
-- **手动**：在 Unity 把 `model.ply` 拖入 `Assets/`，aras-p 插件会自动生成 `GaussianSplatAsset`，
-  挂在 `GaussianSplatRenderer` 上。
+```
+↩ 把 .ply 加入当前场景
+```
 
-> 之后会扩展 `Agent3DGSAutoImporter`，让面板"生成场景"完成时**直接在场景内加载**结果，
-> 不需要 Editor 步骤。
+点一下即可（**仅在 Unity Editor 内有效**；标准 player 构建里这块代码被剥离）：
+
+1. 把后端 `data/jobs/<id>/result/model.ply` 复制到 `Assets/Generated3DGS/jobs/<id>/`（如果
+   后端不在本机，则改走 `GET /api/jobs/{id}/result` 下载）；
+2. 反射调用 aras-p 公开的 `GaussianSplatting.Editor.GaussianSplatAssetCreator`
+   （等同 `Tools > Gaussian Splats > Create GaussianSplatAsset`），把 `.ply` 转成
+   `GaussianSplatAsset`；
+3. 在**当前活动场景**新建一个 `GameObject` + `GaussianSplatRenderer`，把生成的 asset 赋
+   过去，标记场景已修改。**不新建场景、不替换场景**，与队友的 `Agent3DGSAutoImporter`/
+   `Agent3DGSSceneBuilder` 完全独立，没有任何修改。
+
+如果按钮置灰 / 一直转：通常是 aras-p 插件还没被 Package Manager 装完，等右下角
+编译条转完再点一次。
+
+### 备用手动路径
+
+不想用按钮的话仍可走原来的两条路：
+- **菜单**：`Agent3DGS > Auto Import Configured PLY`（来自队友的 `Agent3DGSAutoImporter`，会**新建场景**）。
+- **纯手动**：把 `model.ply` 拖进 `Assets/`，aras-p 会自动生成 asset，再挂到 `GaussianSplatRenderer` 上。
 
 ## 六、与同目录其他文件的关系
 
