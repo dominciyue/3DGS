@@ -112,6 +112,25 @@ function frameSceneToCamera() {
     console.log("[viewer] framed:",
       { count, sampled: n, center: center.toArray(), size: size.toArray(),
         radius, dist, camPos: cam.position.toArray() });
+
+    // —— 调试: 抽 5 个 splat,把位置/颜色/缩放/透明度全打出来 ——
+    try {
+      const probe = [];
+      for (let i = 0; i < Math.min(5, count); i++) {
+        const item = { idx: i };
+        const v3 = new THREE.Vector3(), v4 = new THREE.Vector4();
+        if (typeof mesh.getSplatCenter === "function") { mesh.getSplatCenter(i, v3); item.pos = v3.toArray().map(n=>+n.toFixed(3)); }
+        if (typeof mesh.getSplatScale  === "function") { const s=new THREE.Vector3(); mesh.getSplatScale(i, s); item.scale = s.toArray().map(n=>+n.toFixed(4)); }
+        if (typeof mesh.getSplatColor  === "function") { mesh.getSplatColor(i, v4); item.color = v4.toArray().map(n=>+n.toFixed(3)); }
+        if (typeof mesh.getSplatOpacity=== "function") { item.opacity = +mesh.getSplatOpacity(i).toFixed(3); }
+        probe.push(item);
+      }
+      console.log("[viewer] first 5 splats:", probe);
+      // 列出 splatMesh 上能调的方法,以防我用错 API 名字
+      const proto = Object.getPrototypeOf(mesh);
+      const methods = Object.getOwnPropertyNames(proto).filter(k => typeof mesh[k] === "function").sort();
+      console.log("[viewer] splatMesh methods:", methods);
+    } catch (e) { console.warn("probe failed:", e); }
   } catch (e) {
     console.warn("frameSceneToCamera failed:", e);
   }
