@@ -126,3 +126,73 @@ def test_api_health_and_job_flow():
     res = client.get(f"/api/jobs/{jid}/result")
     assert res.status_code == 200
     assert res.content[:3] == b"ply"
+
+
+# --- new endpoints: /api/jobs/from-path and /api/chat ----------------------
+
+def test_api_jobs_from_path(tmp_path):
+    """Unity-side workflow: hand the backend a server-side folder of images."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    folder = tmp_path / "images"
+    folder.mkdir()
+    for i in range(3):
+        (folder / f"img{i}.jpg").write_bytes(b"x" * 64)
+    # also drop a non-image to ensure it's ignored
+    (folder / "notes.txt").write_text("ignore me")
+
+    client = TestClient(app)
+    r = client.post("/api/jobs/from-path",
+                    json={"path": str(folder),
+                          "instruction": "anti-aliased preview",
+                          "preset": "preview"})
+    assert r.status_code == 200, r.text
+    jid = r.json()["job_id"]
+
+    status = None
+    for _ in range(200):
+        status = client.get(f"/api/jobs/{jid}").json()
+        if status["status"] in ("done", "failed", "cancelled"):
+            break
+        time.sleep(0.05)
+    assert status and status["status"] == "done", status
+    assert status["image_count"] == 3
+    assert status["config"]["train"]["backend"] == "mip"   # routed by mock planner
+
+
+def test_api_jobs_from_path_validation():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    r = client.post("/api/jobs/from-path", json={"path": "/nope/does/not/exist"})
+    assert r.status_code == 400
+    assert "not a directory" in r.text
+
+
+def test_api_chat_mock_replies():
+    """Chat with no API key uses the rule-based mock; keywords route to canned replies."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+
+    r = client.post("/api/chat",
+                    json={"messages": [{"role": "user", "content": "我想要抗锯齿"}]})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["backend"] == "mock"
+    assert "mip" in body["reply"].lower()
+
+    r2 = client.post("/api/chat",
+                     json={"messages": [{"role": "user", "content": "你好"}]})
+    assert r2.status_code == 200 and r2.json()["reply"]
+
+
+def test_api_chat_rejects_empty_or_assistant_last():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    assert client.post("/api/chat", json={"messages": []}).status_code == 400
+    bad = client.post("/api/chat",
+                      json={"messages": [{"role": "assistant", "content": "hi"}]})
+    assert bad.status_code == 400

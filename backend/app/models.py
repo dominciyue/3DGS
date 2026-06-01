@@ -160,3 +160,33 @@ class HealthResponse(BaseModel):
     mock_pipeline: bool
     llm_enabled: bool
     version: str
+
+
+# --------------------------------------------------------------------------- #
+# /api/jobs/from-path  (Unity client triggers reconstruction by server-side dir)
+# --------------------------------------------------------------------------- #
+
+
+class FromPathRequest(BaseModel):
+    path: str
+    instruction: str = ""
+    preset: Optional[Preset] = None
+
+
+# --------------------------------------------------------------------------- #
+# /api/chat  (free-form multi-turn chat with the Agent)
+# --------------------------------------------------------------------------- #
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    backend: str  # "claude" | "mock"

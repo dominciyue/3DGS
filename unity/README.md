@@ -4,6 +4,17 @@
 
 > 本目录仅包含**我们的脚本和配置说明**，并非完整的 Unity 工程。请在本地创建项目（仓库中仅追踪 `Assets/`、`Packages/`、`ProjectSettings/` 目录——缓存和构建输出已被 `.gitignore` 忽略）。完整操作指南：[`../docs/06-unity-integration.md`](../docs/06-unity-integration.md)。
 
+## 两套可选方案
+
+仓库里现在有两套 Unity 端方案，按需要选用，可以共存：
+
+| 方案 | 路径 | 适用 |
+|---|---|---|
+| **A · 简单脚手架（本目录）** | `unity/Assets/Scripts/` | 适合"快速看一眼一个 `.ply`"。包含轨道相机、多对象选择、参数面板。手动建工程 + 装 aras-p + 挂脚本。 |
+| **B · 一键导入 + Studio UI** | [`../tools/unity_3dgs_importer/`](../tools/unity_3dgs_importer/) | 推荐:Python 端 `one_click_import_3dgs_to_unity(...)` 自动把训练好的 3DGS 输出塞进 Unity 工程并生成场景(含**飞行相机** + F1 控制面板);再加 `Agent3DGSStudioUI.cs` 提供**运行时三联面板**(文件夹输入 / 任务状态 / Agent 聊天框,F2 切换),用 `UnityWebRequest` 直接驱动后端流水线和聊天接口。 |
+
+下文是方案 A 的说明;方案 B 见 [`../tools/unity_3dgs_importer/README.md`](../tools/unity_3dgs_importer/README.md) 和 [`STUDIO_UI.md`](../tools/unity_3dgs_importer/STUDIO_UI.md)。
+
 ## 配置（约 10 分钟）
 
 1. 在本 `unity/` 目录下创建 **Unity 6 LTS** 项目（推荐使用 URP）。

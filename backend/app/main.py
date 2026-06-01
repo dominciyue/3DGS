@@ -22,9 +22,11 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
+from .agent.chat import get_chat
 from .config import settings
 from .jobs import JobStore
-from .models import CreateJobResponse, HealthResponse, JobStatus
+from .models import (ChatRequest, ChatResponse, CreateJobResponse, FromPathRequest,
+                     HealthResponse, JobStatus)
 
 app = FastAPI(title="3DGS-Agent", version=__version__)
 app.add_middleware(
@@ -123,6 +125,60 @@ async def cancel_job(job_id: str):
         raise HTTPException(404, "job not found")
     ok = store.cancel(job_id)
     return {"cancelled": ok}
+
+
+# --------------------------------------------------------------------------- #
+# /api/jobs/from-path  — Unity client triggers a job by handing us a server-side
+# folder of images, instead of uploading them via multipart.
+# --------------------------------------------------------------------------- #
+
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+
+
+@app.post("/api/jobs/from-path", response_model=CreateJobResponse)
+async def create_job_from_path(req: FromPathRequest) -> CreateJobResponse:
+    p = Path(req.path).expanduser().resolve()
+    if not p.is_dir():
+        raise HTTPException(400, f"not a directory: {p}")
+    files: list[tuple[str, bytes]] = []
+    for img in sorted(p.iterdir()):
+        if img.is_file() and img.suffix.lower() in IMAGE_EXTS:
+            try:
+                files.append((img.name, img.read_bytes()))
+            except OSError as exc:
+                raise HTTPException(400, f"cannot read {img.name}: {exc}") from exc
+    if not files:
+        raise HTTPException(400, f"no images found in {p}")
+    job = await store.create_job(instruction=req.instruction or "",
+                                 preset=req.preset, files=files)
+    return CreateJobResponse(job_id=job.id)
+
+
+# --------------------------------------------------------------------------- #
+# /api/chat  — multi-turn free-form chat with the Agent (separate from the
+# planner; used by the Unity studio UI's chat box).
+# --------------------------------------------------------------------------- #
+
+_chat_handler = None  # lazy, single instance
+
+
+def _chat():
+    global _chat_handler
+    if _chat_handler is None:
+        _chat_handler = get_chat(settings)
+    return _chat_handler
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat(req: ChatRequest) -> ChatResponse:
+    if not req.messages:
+        raise HTTPException(400, "messages cannot be empty")
+    if req.messages[-1].role != "user":
+        raise HTTPException(400, "last message must be from user")
+    handler = _chat()
+    payload = [m.model_dump() for m in req.messages]
+    reply = await asyncio.to_thread(handler.reply, payload)
+    return ChatResponse(reply=reply, backend=getattr(handler, "name", "?"))
 
 
 # Serve the static frontend at / if present (added last so /api/* wins).
