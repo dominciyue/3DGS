@@ -35,12 +35,19 @@ function ensureViewer() {
   if (viewer) return viewer;
   viewer = new GaussianSplats3D.Viewer({
     rootElement: $("viewer-container"),
-    sharedMemoryForWorkers: false,   // 避开 COOP/COEP 要求
-    // 关键: 开 anti-alias (Mip-Splatting 风格滤波), 不开就会有长条尖刺
+    sharedMemoryForWorkers: false,
     antialiased: true,
-    // 跟文件实际 SH 阶数对齐 (Inria 默认 sh_degree=3, 共 45 个 f_rest_*)
     sphericalHarmonicsDegree: 3,
   });
+  // 修过亮: WebGL 默认线性输出,Unity 是 sRGB,所以那边正常这边过曝
+  try {
+    if (viewer.renderer) {
+      if (THREE.SRGBColorSpace) viewer.renderer.outputColorSpace = THREE.SRGBColorSpace;
+      else if (THREE.sRGBEncoding) viewer.renderer.outputEncoding = THREE.sRGBEncoding;
+      viewer.renderer.toneMapping = THREE.NoToneMapping;
+      console.log("[viewer] outputColorSpace =", viewer.renderer.outputColorSpace);
+    }
+  } catch (e) { console.warn("color space set failed:", e); }
   return viewer;
 }
 
@@ -174,15 +181,12 @@ async function loadScene(url, label) {
   }
 
   try {
-    // === 渲染参数 v3 (2026-06-01) === 用 F12 Network 找 app.js 搜这行确认版本
+    // === 渲染参数 v4 (sRGB 输出 + 高 alpha 阈值) ===
     await viewer.addSplatScene(url, {
       format: PLY_FORMAT,
       showLoadingUI: true,
-      splatAlphaRemovalThreshold: 30,     // 加大阈值: 5 不够,30≈12% 剔除噪声雾
+      splatAlphaRemovalThreshold: 80,     // 暴力剔除低 opacity (≈ 31%)
     });
-    // 让用户在 F12 控制台手动微调
-    window.__dbg = window.__dbg || {};
-    window.__dbg.viewerConfig = { antialiased: true, shDegree: 3, alphaThresh: 30 };
     if (!viewerStarted) { viewer.start(); viewerStarted = true; }
     // 装好后把相机框到点云中心;有时 splat 数据稍后才就绪,延时重试 3 次
     let tries = 0;
