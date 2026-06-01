@@ -38,8 +38,9 @@ function ensureViewer() {
     // 用 Three.js 默认 Y-up (不强行覆盖 cameraUp), 避免 splat 被翻反
     initialCameraPosition: [0, 2, 6],
     initialCameraLookAt: [0, 0, 0],
-    // 关键: 跟着 .ply 的实际 SH 阶数 (Inria 默认 sh_degree=3); 设错会渲染异常
-    sphericalHarmonicsDegree: 0,    // 先用 0 = 只看 DC 基色,排除 SH 解析问题
+    // 关键: 必须跟 .ply 实际 SH 阶数一致 (Inria 默认 sh_degree=3) —— 库按这个
+    // 决定每个 splat 读多少字节;设错就 opacity/scale/quat 全部错位 → 看不到
+    sphericalHarmonicsDegree: 3,
     gpuAcceleratedSort: true,
     sharedMemoryForWorkers: false,
     selfDrivenMode: true,
@@ -142,10 +143,9 @@ async function loadScene(url, label) {
 
   try {
     await viewer.addSplatScene(url, {
-      format: PLY_FORMAT,         // ← 关键: 显式告诉库这是 .ply
+      format: PLY_FORMAT,         // ← 显式声明 PLY (避免 URL 无后缀的格式判断错误)
       showLoadingUI: true,
-      splatAlphaRemovalThreshold: 5,
-      // progressiveLoad 在某些场景下相机会摆不对,先关掉
+      splatAlphaRemovalThreshold: 1,   // 放宽,别过度剔除
       progressiveLoad: false,
     });
     if (!viewerStarted) { viewer.start(); viewerStarted = true; }
